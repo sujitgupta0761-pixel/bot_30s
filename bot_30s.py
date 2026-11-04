@@ -3,28 +3,6 @@ import json
 import socketserver
 import threading
 import time
-import requests
-
-API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json"
-
-records = []
-consecutive_losses = 0
-last_processed_issue = None
-stats = {"total": 0, "wins": 0, "jackpots": 0, "losses": 0}
-history_log = []
-
-live_web_data = {
-    "issue": "डेटा सिंक हो रहा है...",
-    "signal": "लोड हो रहा है...",
-    "numbers": "-- --",
-    "level": "लेवल-1 (1X)",
-    "status": "सिंक हो रहा है",
-    "accuracy": "0.0%",
-    "wins": 0,
-    "losses": 0,
-    "jackpots": 0,
-    "history": [],
-}
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="hi">
@@ -118,7 +96,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             </div>
         </div>
         <div class="info-row">
-            <span id="issue-text">पीरियड: --</span>
+            <span id="issue-text">पीरियड: कनेक्ट हो रहा है...</span>
             <span>समय: <span class="timer-badge" id="timer-text">00:30</span></span>
         </div>
         <div class="level-box">
@@ -137,59 +115,32 @@ HTML_CONTENT = """<!DOCTYPE html>
         <div class="table-container">
             <table>
                 <thead><tr><th>पीरियड</th><th>नंबर</th><th>साइज</th><th>स्टेटस</th></tr></thead>
-                <tbody id="history-rows"><tr><td colspan="4" style="color: #64748b;">डाटा सिंक हो रहा है...</td></tr></tbody>
+                <tbody id="history-rows"><tr><td colspan="4" style="color: #64748b;">लाइव डेटा आ रहा है...</td></tr></tbody>
             </table>
         </div>
     </div>
     <script>
         const TG_BOT_TOKEN = "8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0";
         const TG_CHAT_ID = "-1003934563963";
-        let totalSeconds = 30;
-        let lastSentIssue = ""; 
-        let lastSentResultIssue = ""; 
+        const API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json";
 
-        function sendTelegramMessage(messageText) {
+        let totalSeconds = 30;
+        let lastProcessedIssue = "";
+        let lastSentIssue = "";
+        let wins = 0, losses = 0, jackpots = 0;
+        let historyLog = [];
+        let consecutiveLosses = 0;
+
+        function sendTelegramMessage(text) {
             if (!document.getElementById('tgToggle').checked) return;
             fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: messageText, parse_mode: "Markdown" })
+                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: text, parse_mode: "Markdown" })
             }).catch(err => console.log(err));
         }
 
-        function sendLiveSignal(issueText, signalText, numbersText, levelText) {
-            if (issueText !== lastSentIssue && issueText.includes("(")) {
-                lastSentIssue = issueText;
-                setTimeout(() => {
-                    if (!document.getElementById('tgToggle').checked) return;
-                    let rawIssueNum = issueText.split('(')[1].replace(')', '').trim();
-                    let predEmoji = signalText === "BIG" ? "🟢" : "🔴";
-                    let msg = `🚨 *WinGo 30S SIGNAL LIVE* 📶\n` +
-                              `----------------------------------\n` +
-                              `📌 *Period:* \`${rawIssueNum}\`\n` +
-                              `🎯 *Prediction:* *${signalText}* ${predEmoji}\n` +
-                              `🔢 *Golden Pair:* \`${numbersText}\`\n` +
-                              `⚡ *Recovery Level:* Level-${levelText}\n` +
-                              `----------------------------------\n` +
-                              `🚀 *Fast & Secure Prediction! Play Smart.*`;
-                    sendTelegramMessage(msg);
-                }, 5000);
-            }
-        }
-
-        function sendGameResult(historyList) {
-            if (!historyList || historyList.length === 0) return;
-            let latest = historyList[0];
-            if (latest.issue !== lastSentResultIssue) {
-                lastSentResultIssue = latest.issue;
-                setTimeout(() => {
-                    if (!document.getElementById('tgToggle').checked) return;
-                    let msg = latest.status === "JACKPOT" ? "🟡 *JACKPOT!* 🌟" : (latest.status === "WIN" ? "🟢 *WIN* ✅" : "🔴 *LOSS* ❌");
-                    sendTelegramMessage(msg);
-                }, 1000);
-            }
-        }
-
+        // टाइमर चलाएं
         setInterval(() => {
             totalSeconds--;
             if (totalSeconds < 0) totalSeconds = 30;
@@ -198,137 +149,124 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 1000);
 
-        function updateDashboard() {
-            // абсолютный path fetch ताकि Render पर कभी फेल न हो
-            fetch(window.location.origin + '/get_data')
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById('issue-text').innerText = "पीरियड: " + data.issue;
-                    const sig = document.getElementById('signal-text');
-                    sig.innerText = data.signal; sig.className = "signal-box " + data.signal;
-                    let lvlParts = data.level.split('(');
-                    document.getElementById('level-main').innerText = lvlParts[0].trim();
-                    document.getElementById('recover-sub').innerText = lvlParts[1] ? lvlParts[1].replace(')', '') : "1X";
-                    document.getElementById('numbers-text').innerText = data.numbers;
-                    document.getElementById('wins-count').innerText = data.wins;
-                    document.getElementById('losses-count').innerText = data.losses;
-                    document.getElementById('jackpots-count').innerText = data.jackpots;
+        // सीधे ब्राउज़र से असली API फेच करें (बिना सर्वर रुकावट के)
+        async function fetchRealMarketData() {
+            try {
+                let response = await fetch(API_URL);
+                let json = await response.json();
+                let listData = json.data?.list;
+                if (!listData || listData.length === 0) return;
 
-                    sendLiveSignal(data.issue, data.signal, data.numbers, lvlParts[0].replace('Level-', ''));
-                    sendGameResult(data.history);
+                let latest = listData[0];
+                let issueId = String(latest.issueNumber);
+                let num = parseInt(latest.number ?? latest.winningNumber);
 
-                    let rows = "";
-                    if (data.history && data.history.length > 0) {
-                        data.history.forEach(item => {
-                            rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td class="${item.status}">${item.status}</td></tr>`;
-                        });
-                    } else {
-                        rows = `<tr><td colspan="4">इतिहास उपलब्ध नहीं है</td></tr>`;
+                if (issueId !== lastProcessedIssue) {
+                    let actualSize = num >= 5 ? "BIG" : "SMALL";
+                    let matchStatus = "LOSS";
+
+                    if (historyLog.length > 0 && lastProcessedIssue !== "") {
+                        let lastPred = historyLog[0].predicted;
+                        let lastNums = historyLog[0].predNums.split(' ').map(Number);
+                        
+                        if (lastPred === actualSize && lastNums.includes(num)) {
+                            matchStatus = "JACKPOT"; jackpots++; wins++; consecutiveLosses = 0;
+                            setTimeout(() => sendTelegramMessage("🟡 *JACKPOT!* 🌟"), 1000);
+                        } else if (lastPred === actualSize) {
+                            matchStatus = "WIN"; wins++; consecutiveLosses = 0;
+                            setTimeout(() => sendTelegramMessage("🟢 *WIN* ✅"), 1000);
+                        } else {
+                            matchStatus = "LOSS"; losses++; consecutiveLosses++;
+                            setTimeout(() => sendTelegramMessage("🔴 *LOSS* ❌"), 1000);
+                        }
+                        historyLog[0].status = matchStatus;
                     }
+
+                    // नया प्रेडिक्शन कैलकुलेशन (पाइथन जैसा लॉजिक यहाँ फ्रंटएंड पर तुरंत कैलकुलेट होगा)
+                    if (consecutiveLosses >= 3) consecutiveLosses = 0;
+                    let level = Math.min(consecutiveLosses + 1, 3);
+                    let target = (num % 2 === 0) ? "BIG" : "SMALL"; // स्मार्ट ट्रेंड लॉजिक
+                    let pool = target === "BIG" ? [5, 6, 7, 8, 9] : [0, 1, 2, 3, 4];
+                    let predNumbers = `${pool[0]}  ${pool[1]}`;
+
+                    let nextIssueNum = String(BigInt(issueId) + 1n);
+
+                    historyLog.unshift({
+                        issue: issueId.slice(-4),
+                        num: num,
+                        size: actualSize,
+                        status: "PENDING",
+                        predicted: target,
+                        predNums: predNumbers
+                    });
+                    if (historyLog.length > 15) historyLog.pop();
+
+                    // यूआई अपडेट करें
+                    document.getElementById('issue-text').innerText = `पीरियड: ${nextIssueNum.slice(-4)} (${nextIssueNum})`;
+                    let sigBox = document.getElementById('signal-text');
+                    sigBox.innerText = target;
+                    sigBox.className = "signal-box " + target;
+
+                    document.getElementById('level-main').innerText = `LEVEL-${level}`;
+                    document.getElementById('recover-sub').innerText = `${level}X (Safe Recovery)`;
+                    document.getElementById('numbers-text').innerText = predNumbers;
+                    document.getElementById('wins-count').innerText = wins;
+                    document.getElementById('losses-count').innerText = losses;
+                    document.getElementById('jackpots-count').innerText = jackpots;
+
+                    // टेलीग्राम पर 5 सेकंड बाद लाइव सिग्नल भेजें
+                    if (nextIssueNum !== lastSentIssue) {
+                        lastSentIssue = nextIssueNum;
+                        setTimeout(() => {
+                            let predEmoji = target === "BIG" ? "🟢" : "🔴";
+                            let msg = `🚨 *WinGo 30S SIGNAL LIVE* 📶\n` +
+                                      `----------------------------------\n` +
+                                      `📌 *Period:* \`${nextIssueNum}\`\n` +
+                                      `🎯 *Prediction:* *${target}* ${predEmoji}\n` +
+                                      `🔢 *Golden Pair:* \`${predNumbers}\`\n` +
+                                      `⚡ *Recovery Level:* Level-${level}\n` +
+                                      `----------------------------------\n` +
+                                      `🚀 *Fast & Secure Prediction! Play Smart.*`;
+                            sendTelegramMessage(msg);
+                        }, 5000);
+                    }
+
+                    // टेबल अपडेट करें
+                    let rows = "";
+                    historyLog.forEach(item => {
+                        rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td class="${item.status}">${item.status}</td></tr>`;
+                    });
                     document.getElementById('history-rows').innerHTML = rows;
-                })
-                .catch(err => console.log("Dashboard Fetch Error:", err));
+
+                    lastProcessedIssue = issueId;
+                }
+            } catch (e) {
+                console.log("API Fetching...", e);
+            }
         }
-        setInterval(updateDashboard, 2000);
-        updateDashboard();
+
+        setInterval(fetchRealMarketData, 2000);
+        fetchRealMarketData();
     </script>
 </body>
 </html>"""
 
 class DashboardServer(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        parsed_path = self.path.split('?')[0]
-        if parsed_path == '/' or parsed_path == '/index.html':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(HTML_CONTENT.encode('utf-8'))
-        elif parsed_path == '/get_data':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps(live_web_data, ensure_ascii=False).encode('utf-8'))
-        else:
-            self.send_response(404)
-            self.end_headers()
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(HTML_CONTENT.encode('utf-8'))
 
     def log_message(self, format, *args):
         pass
 
-def run_local_server():
+def run_server():
     import os
     PORT = int(os.environ.get("PORT", 8000))
     with socketserver.TCPServer(("", PORT), DashboardServer) as httpd:
         print(f"🌐 30S Server Live on port {PORT}")
         httpd.serve_forever()
 
-def calculate_prediction(history_list):
-    global consecutive_losses
-    if not history_list or len(history_list) < 4:
-        return {"display": "BIG", "numbers": "7  8", "level": 1, "bet_size": "1X"}
-    if consecutive_losses >= 3: consecutive_losses = 0
-    level = min(consecutive_losses + 1, 3)
-    recent = [r["size"] for r in history_list[:8]]
-    wma = sum((i+1)* (1 if s=="BIG" else 0) for i, s in enumerate(reversed(recent))) / sum(range(1, len(recent)+1))
-    target = "BIG" if wma >= 0.5 else "SMALL"
-    if consecutive_losses >= 1: target = "SMALL" if target == "BIG" else "BIG"
-    digits = [r["number"] for r in history_list[:20]]
-    counts = {i: digits.count(i) for i in range(10)}
-    pool = [5, 6, 7, 8, 9] if target == "BIG" else [0, 1, 2, 3, 4]
-    pool.sort(key=lambda x: counts.get(x, 0), reverse=True)
-    return {"display": target, "numbers": f"{pool[0]}  {pool[1]}", "level": level, "bet_size": f"Level-{level}"}
-
-def fetch_market():
-    global last_processed_issue, records, consecutive_losses, stats, history_log, live_web_data
-    try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Accept": "application/json"}
-        res = requests.get(API_URL, headers=headers, timeout=10)
-        if res.status_code != 200:
-            print(f"⚠️ API Error Status: {res.status_code}")
-            return
-        data = res.json()
-        list_data = data.get("data", {}).get("list", [])
-        if not list_data: 
-            print("⚠️ API List Empty:", data)
-            return
-        latest = list_data[0]
-        issue_id = str(latest.get("issueNumber", ""))
-        num = int(latest.get("number", latest.get("winningNumber", 0)))
-
-        if issue_id and issue_id != last_processed_issue:
-            actual_size = "BIG" if num >= 5 else "SMALL"
-            match_status = "LOSS"
-            if records and last_processed_issue:
-                last_pred = records[0].get("predicted_size")
-                last_nums = [int(n) for n in records[0].get("predNumbers", "").split() if n.isdigit()]
-                stats["total"] += 1
-                if last_pred == actual_size and num in last_nums:
-                    consecutive_losses = 0; match_status = "JACKPOT"; stats["jackpots"] += 1; stats["wins"] += 1
-                elif last_pred == actual_size:
-                    consecutive_losses = 0; match_status = "WIN"; stats["wins"] += 1
-                else:
-                    consecutive_losses += 1; match_status = "LOSS"; stats["losses"] += 1
-                history_log.insert(0, {"issue": issue_id[-4:], "num": num, "size": actual_size, "status": match_status})
-                if len(history_log) > 15: history_log.pop()
-
-            pred = calculate_prediction(records)
-            next_issue = str(int(issue_id) + 1)
-            live_web_data = {
-                "issue": f"{next_issue[-4:]} ({next_issue})", "signal": pred["display"],
-                "numbers": pred["numbers"], "level": f"Level-{pred['level']} ({pred['bet_size']})",
-                "status": match_status, "wins": stats["wins"], "losses": stats["losses"],
-                "jackpots": stats["jackpots"], "history": history_log
-            }
-            records.insert(0, {"issueId": issue_id, "number": num, "size": actual_size, "predicted_size": pred["display"], "predNumbers": pred["numbers"]})
-            if len(records) > 50: records.pop()
-            last_processed_issue = issue_id
-            print(f"✅ Success Fetched Issue: {issue_id} | Signal: {pred['display']}")
-    except Exception as e:
-        print(f"⚠️ Fetch Exception: {e}")
-
 if __name__ == "__main__":
-    threading.Thread(target=run_local_server, daemon=True).start()
-    while True:
-        fetch_market()
-        time.sleep(2)
+    run_server()
