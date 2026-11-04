@@ -7,12 +7,15 @@ import requests
 
 TG_BOT_TOKEN = "8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0"
 TG_CHAT_ID = "-1003934563963"
+API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json"
 
 records = []
 consecutive_losses = 0
 last_processed_issue = None
 stats = {"total": 0, "wins": 0, "jackpots": 0, "losses": 0}
 history_log = []
+latest_dashboard_data = {}
+data_lock = threading.Lock()
 
 def calculate_prediction(history_list):
     global consecutive_losses
@@ -39,6 +42,67 @@ def calculate_prediction(history_list):
     
     return {"display": target, "numbers": f"{pool[0]}  {pool[1]}", "level": current_step, "bet_size": f"Level-{current_step}"}
 
+def background_worker():
+    global records, consecutive_losses, last_processed_issue, stats, history_log, latest_dashboard_data
+    while True:
+        try:
+            res = requests.get(API_URL, timeout=3)
+            json_data = res.json()
+            latest = json_data.get("data", {}).get("list", [])[0]
+            if latest:
+                issueId = str(latest["issueNumber"])
+                num = int(latest.get("number", latest.get("winningNumber", 0)))
+                
+                if issueId != last_processed_issue:
+                    last_processed_issue = issueId
+                    actual_size = "BIG" if num >= 5 else "SMALL"
+                    result_header = None
+
+                    with data_lock:
+                        if records:
+                            last_pred = records[0].get("predicted_size")
+                            last_nums = [int(n) for n in records[0].get("predNumbers", "").split() if n.isdigit()]
+                            stats["total"] += 1
+                            if last_pred == actual_size and num in last_nums:
+                                consecutive_losses = 0; result_header = "👑 JACKPOT ⚡👑"; stats["jackpots"] += 1; stats["wins"] += 1
+                            elif last_pred == actual_size:
+                                consecutive_losses = 0; result_header = "👑  WIN ⚡👑"; stats["wins"] += 1
+                            else:
+                                consecutive_losses += 1; result_header = "LOSS 🤬💔"; stats["losses"] += 1
+                            
+                            history_log.insert(0, {"issue": issueId[-4:], "num": num, "size": actual_size, "status": result_header})
+                            if len(history_log) > 15: history_log.pop()
+
+                        pred = calculate_prediction(records)
+                        next_issue = str(int(issueId) + 1)
+                        
+                        records.insert(0, {"issueId": issueId, "number": num, "size": actual_size, "predicted_size": pred["display"], "predNumbers": pred["numbers"]})
+                        if len(records) > 50: records.pop()
+
+                        short_next = next_issue[-4:]
+                        signal_line = "🟢 Signal: BIG" if pred["display"] == "BIG" else "🔴 Signal: SMALL"
+                        signal_msg = (f"👑 PREDICTION VIP 👑\n"
+                                      f"🏷️ Period: {short_next}\n"
+                                      f"{signal_line}\n"
+                                      f"🎯 Target: {pred['numbers']}\n"
+                                      f"📊 Plan: {pred['bet_size']}")
+
+                        latest_dashboard_data = {
+                            "issue": f"{short_next} ({next_issue})",
+                            "signal": pred["display"],
+                            "numbers": pred["numbers"],
+                            "level": f"Level-{pred['level']}",
+                            "wins": stats["wins"],
+                            "losses": stats["losses"],
+                            "jackpots": stats["jackpots"],
+                            "history": history_log,
+                            "result_message": result_header,
+                            "signal_message": signal_msg
+                        }
+        except Exception as e:
+            pass
+        time.sleep(1)
+
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="hi">
 <head>
@@ -51,7 +115,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         .vip-card { background: var(--card-bg); border: 2px solid var(--border-glow); border-radius: 22px; padding: 22px; width: 100%; max-width: 420px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9); }
         .header-title { font-size: 24px; font-weight: 900; color: #38bdf8; margin-bottom: 15px; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; background: #1e1b4b; padding: 10px 14px; border-radius: 12px; margin-bottom: 14px; }
-        .tg-control { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+        .tg-control { font-size: 12px; display: flex; align-items: center; gap: 6px; color: #38bdf8; font-weight: bold; }
         .info-row { display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.8); padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; font-size: 13px; }
         .timer-badge { background: rgba(251, 191, 36, 0.2); color: var(--accent-gold); padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 14px; font-weight: bold; }
         .level-box { background: #1e1b4b; border: 1px solid #475569; color: #facc15; font-weight: 800; padding: 10px; border-radius: 10px; font-size: 16px; margin-bottom: 12px; }
@@ -68,8 +132,8 @@ HTML_CONTENT = """<!DOCTYPE html>
     <div class="vip-card">
         <div class="header-title">BSNL VIP 30S Terminal</div>
         <div class="top-bar">
-            <button class="active" style="background:#0284c7; color:#fff; border:0; padding:6px 14px; border-radius:8px;">30S</button>
-            <div class="tg-control"><span>Telegram:</span> <input type="checkbox" id="tgToggle" checked></div>
+            <button style="background:#0284c7; color:#fff; border:0; padding:6px 14px; border-radius:8px;">30S</button>
+            <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
         <div class="level-box"><div id="level-main">LEVEL-1</div></div>
@@ -89,8 +153,9 @@ HTML_CONTENT = """<!DOCTYPE html>
         </div>
     </div>
     <script>
-        const API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json";
-        let lastCheckedIssue = "";
+        const TG_BOT_TOKEN = "8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0";
+        const TG_CHAT_ID = "-1003934563963";
+        let lastProcessedIssueUI = "";
 
         setInterval(() => {
             let now = new Date();
@@ -101,147 +166,76 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 500);
 
-        async function syncWithPythonBrain() {
+        async function fetchDashboardData() {
             try {
-                let res = await fetch(API_URL);
-                let json = await res.json();
-                let latest = json.data?.list?.[0];
-                if (!latest) return;
+                let res = await fetch('/get_data');
+                let data = await res.json();
+                if (!data.issue) return;
 
-                let issueId = String(latest.issueNumber);
-                let num = parseInt(latest.number ?? latest.winningNumber);
+                document.getElementById('issue-text').innerText = "पीरियड नंबर: " + data.issue;
+                document.getElementById('signal-text').innerText = data.signal;
+                document.getElementById('level-main').innerText = data.level || "LEVEL-1";
+                document.getElementById('numbers-text').innerText = data.numbers;
+                document.getElementById('wins-count').innerText = data.wins;
+                document.getElementById('losses-count').innerText = data.losses;
+                document.getElementById('jackpots-count').innerText = data.jackpots;
 
-                if (issueId !== lastCheckedIssue) {
-                    lastCheckedIssue = issueId;
-                    
-                    let postRes = await fetch('/post_data', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ issue: issueId, number: num })
-                    });
-                    let data = await postRes.json();
+                let rows = "";
+                data.history.forEach(item => {
+                    rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td>${item.status}</td></tr>`;
+                });
+                document.getElementById('history-rows').innerHTML = rows;
 
-                    document.getElementById('issue-text').innerText = "पीरियड नंबर: " + data.issue;
-                    let sig = document.getElementById('signal-text');
-                    sig.innerText = data.signal;
-                    document.getElementById('level-main').innerText = data.level;
-                    document.getElementById('numbers-text').innerText = data.numbers;
-                    document.getElementById('wins-count').innerText = data.wins;
-                    document.getElementById('losses-count').innerText = data.losses;
-                    document.getElementById('jackpots-count').innerText = data.jackpots;
+                // अगर नया पीरियड आया है और Telegram स्विच ON है
+                let currentIssueNum = data.issue.split(' ')[1];
+                if (currentIssueNum !== lastProcessedIssueUI && document.getElementById('tgToggle').checked) {
+                    lastProcessedIssueUI = currentIssueNum;
 
-                    let rows = "";
-                    data.history.forEach(item => {
-                        rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td>${item.status}</td></tr>`;
-                    });
-                    document.getElementById('history-rows').innerHTML = rows;
-
-                    if (document.getElementById('tgToggle').checked && data.send_telegram) {
-                        // 1. रिज़ल्ट मैसेज तुरंत जाएगा
-                        if (data.result_message) {
-                            fetch(`https://api.telegram.org/bot8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0/sendMessage`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ chat_id: "-1003934563963", text: data.result_message, parse_mode: "Markdown" })
-                            }).catch(err => {});
-                        }
-
-                        // 2. सिर्फ सिग्नल भेजने से पहले ठीक 5 सेकंड का डिले होगा
-                        await new Promise(r => setTimeout(r, 5000));
-
-                        // 3. अब नया सिग्नल मैसेज जाएगा
-                        fetch(`https://api.telegram.org/bot8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0/sendMessage`, {
+                    if (data.result_message) {
+                        fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ chat_id: "-1003934563963", text: data.signal_message, parse_mode: "Markdown" })
+                            body: JSON.stringify({ chat_id: TG_CHAT_ID, text: data.result_message, parse_mode: "Markdown" })
                         }).catch(err => {});
                     }
+
+                    // 5 सेकंड का डिले सिर्फ सिग्नल से पहले
+                    setTimeout(() => {
+                        if (document.getElementById('tgToggle').checked) {
+                            fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: data.signal_message, parse_mode: "Markdown" })
+                            }).catch(err => {});
+                        }
+                    }, 5000);
                 }
-            } catch (e) { console.log("Sync error", e); }
+            } catch (e) {}
         }
 
-        setInterval(syncWithPythonBrain, 1000);
-        syncWithPythonBrain();
+        setInterval(fetchDashboardData, 1000);
+        fetchDashboardData();
     </script>
 </body>
 </html>"""
 
 class DashboardServer(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
+        global latest_dashboard_data
         if self.path == '/' or self.path == '/index.html':
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
             self.wfile.write(HTML_CONTENT.encode('utf-8'))
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def do_POST(self):
-        global records, consecutive_losses, last_processed_issue, stats, history_log
-        if self.path == '/post_data':
-            content_length = int(self.headers['Content-Length'])
-            post_data = json.loads(self.rfile.read(content_length).decode('utf-8'))
-            
-            issue_id = post_data.get("issue")
-            num = post_data.get("number")
-            actual_size = "BIG" if num >= 5 else "SMALL"
-            
-            result_header = None
-            send_tg = True
-
-            if records and last_processed_issue:
-                last_pred = records[0].get("predicted_size")
-                last_nums = [int(n) for n in records[0].get("predNumbers", "").split() if n.isdigit()]
-                stats["total"] += 1
-                if last_pred == actual_size and num in last_nums:
-                    consecutive_losses = 0; result_header = "👑 JACKPOT ⚡👑"; stats["jackpots"] += 1; stats["wins"] += 1
-                elif last_pred == actual_size:
-                    consecutive_losses = 0; result_header = "👑  WIN ⚡👑"; stats["wins"] += 1
-                else:
-                    consecutive_losses += 1; result_header = "LOSS 🤬💔"; stats["losses"] += 1
-                
-                history_log.insert(0, {"issue": issue_id[-4:], "num": num, "size": actual_size, "status": result_header})
-                if len(history_log) > 15: history_log.pop()
-
-            pred = calculate_prediction(records)
-            next_issue = str(int(issue_id) + 1)
-            
-            records.insert(0, {"issueId": issue_id, "number": num, "size": actual_size, "predicted_size": pred["display"], "predNumbers": pred["numbers"]})
-            if len(records) > 50: records.pop()
-            last_processed_issue = issue_id
-
-            short_next = next_issue[-4:]
-            
-            if pred["display"] == "BIG":
-                signal_line = "🟢 Signal: BIG"
-            else:
-                signal_line = "🔴 Signal: SMALL"
-
-            signal_msg = (f"👑 PREDICTION VIP 👑\n"
-                          f"🏷️ Period: {short_next}\n"
-                          f"{signal_line}\n"
-                          f"🎯 Target: {pred['numbers']}\n"
-                          f"📊 Plan: {pred['bet_size']}")
-
-            response_data = {
-                "issue": f"{next_issue[-4:]} ({next_issue})",
-                "signal": pred["display"],
-                "numbers": pred["numbers"],
-                "level": f"Level-{pred['level']}",
-                "wins": stats["wins"],
-                "losses": stats["losses"],
-                "jackpots": stats["jackpots"],
-                "history": history_log,
-                "send_telegram": send_tg,
-                "result_message": result_header,
-                "signal_message": signal_msg
-            }
-
+        elif self.path == '/get_data':
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.end_headers()
-            self.wfile.write(json.dumps(response_data, ensure_ascii=False).encode('utf-8'))
+            with data_lock:
+                self.wfile.write(json.dumps(latest_dashboard_data, ensure_ascii=False).encode('utf-8'))
+        else:
+            self.send_response(404)
+            self.end_headers()
 
     def log_message(self, format, *args):
         pass
@@ -249,6 +243,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
 def run_server():
     import os
     PORT = int(os.environ.get("PORT", 8000))
+    threading.Thread(target=background_worker, daemon=True).start()
     with socketserver.TCPServer(("", PORT), DashboardServer) as httpd:
         print(f"🌐 30S Server Live on port {PORT}")
         httpd.serve_forever()
