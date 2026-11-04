@@ -164,13 +164,13 @@ HTML_CONTENT = """<!DOCTYPE html>
                     if (!document.getElementById('tgToggle').checked) return;
                     let rawIssueNum = issueText.split('(')[1].replace(')', '').trim();
                     let predEmoji = signalText === "BIG" ? "🟢" : "🔴";
-                    let msg = `🚨 *WinGo 30S SIGNAL LIVE* 📶\\n` +
-                              `----------------------------------\\n` +
-                              `📌 *Period:* \`${rawIssueNum}\`\\n` +
-                              `🎯 *Prediction:* *${signalText}* ${predEmoji}\\n` +
-                              `🔢 *Golden Pair:* \`${numbersText}\`\\n` +
-                              `⚡ *Recovery Level:* Level-${levelText}\\n` +
-                              `----------------------------------\\n` +
+                    let msg = `🚨 *WinGo 30S SIGNAL LIVE* 📶\n` +
+                              `----------------------------------\n` +
+                              `📌 *Period:* \`${rawIssueNum}\`\n` +
+                              `🎯 *Prediction:* *${signalText}* ${predEmoji}\n` +
+                              `🔢 *Golden Pair:* \`${numbersText}\`\n` +
+                              `⚡ *Recovery Level:* Level-${levelText}\n` +
+                              `----------------------------------\n` +
                               `🚀 *Fast & Secure Prediction! Play Smart.*`;
                     sendTelegramMessage(msg);
                 }, 5000);
@@ -199,31 +199,35 @@ HTML_CONTENT = """<!DOCTYPE html>
         }, 1000);
 
         function updateDashboard() {
-            fetch('/get_data').then(res => res.json()).then(data => {
-                document.getElementById('issue-text').innerText = "पीरियड: " + data.issue;
-                const sig = document.getElementById('signal-text');
-                sig.innerText = data.signal; sig.className = "signal-box " + data.signal;
-                let lvlParts = data.level.split('(');
-                document.getElementById('level-main').innerText = lvlParts[0].trim();
-                document.getElementById('recover-sub').innerText = lvlParts[1] ? lvlParts[1].replace(')', '') : "1X";
-                document.getElementById('numbers-text').innerText = data.numbers;
-                document.getElementById('wins-count').innerText = data.wins;
-                document.getElementById('losses-count').innerText = data.losses;
-                document.getElementById('jackpots-count').innerText = data.jackpots;
+            // абсолютный path fetch ताकि Render पर कभी फेल न हो
+            fetch(window.location.origin + '/get_data')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('issue-text').innerText = "पीरियड: " + data.issue;
+                    const sig = document.getElementById('signal-text');
+                    sig.innerText = data.signal; sig.className = "signal-box " + data.signal;
+                    let lvlParts = data.level.split('(');
+                    document.getElementById('level-main').innerText = lvlParts[0].trim();
+                    document.getElementById('recover-sub').innerText = lvlParts[1] ? lvlParts[1].replace(')', '') : "1X";
+                    document.getElementById('numbers-text').innerText = data.numbers;
+                    document.getElementById('wins-count').innerText = data.wins;
+                    document.getElementById('losses-count').innerText = data.losses;
+                    document.getElementById('jackpots-count').innerText = data.jackpots;
 
-                sendLiveSignal(data.issue, data.signal, data.numbers, lvlParts[0].replace('Level-', ''));
-                sendGameResult(data.history);
+                    sendLiveSignal(data.issue, data.signal, data.numbers, lvlParts[0].replace('Level-', ''));
+                    sendGameResult(data.history);
 
-                let rows = "";
-                if (data.history && data.history.length > 0) {
-                    data.history.forEach(item => {
-                        rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td class="${item.status}">${item.status}</td></tr>`;
-                    });
-                } else {
-                    rows = `<tr><td colspan="4">इतिहास उपलब्ध नहीं है</td></tr>`;
-                }
-                document.getElementById('history-rows').innerHTML = rows;
-            }).catch(err => console.log(err));
+                    let rows = "";
+                    if (data.history && data.history.length > 0) {
+                        data.history.forEach(item => {
+                            rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td class="${item.status}">${item.status}</td></tr>`;
+                        });
+                    } else {
+                        rows = `<tr><td colspan="4">इतिहास उपलब्ध नहीं है</td></tr>`;
+                    }
+                    document.getElementById('history-rows').innerHTML = rows;
+                })
+                .catch(err => console.log("Dashboard Fetch Error:", err));
         }
         setInterval(updateDashboard, 2000);
         updateDashboard();
@@ -233,27 +237,30 @@ HTML_CONTENT = """<!DOCTYPE html>
 
 class DashboardServer(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/' or self.path == '/index.html':
+        parsed_path = self.path.split('?')[0]
+        if parsed_path == '/' or parsed_path == '/index.html':
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
-            self.wfile.write(HTML_CONTENT.encode())
-        elif self.path == '/get_data':
+            self.wfile.write(HTML_CONTENT.encode('utf-8'))
+        elif parsed_path == '/get_data':
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps(live_web_data, ensure_ascii=False).encode())
+            self.wfile.write(json.dumps(live_web_data, ensure_ascii=False).encode('utf-8'))
         else:
-            super().do_GET()
+            self.send_response(404)
+            self.end_headers()
 
     def log_message(self, format, *args):
         pass
 
 def run_local_server():
-    PORT = 8000
+    import os
+    PORT = int(os.environ.get("PORT", 8000))
     with socketserver.TCPServer(("", PORT), DashboardServer) as httpd:
-        print(f"🌐 30S Server Live: http://localhost:{PORT}")
+        print(f"🌐 30S Server Live on port {PORT}")
         httpd.serve_forever()
 
 def calculate_prediction(history_list):
@@ -275,9 +282,16 @@ def calculate_prediction(history_list):
 def fetch_market():
     global last_processed_issue, records, consecutive_losses, stats, history_log, live_web_data
     try:
-        res = requests.get(API_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=5).json()
-        list_data = res.get("data", {}).get("list", [])
-        if not list_data: return
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Accept": "application/json"}
+        res = requests.get(API_URL, headers=headers, timeout=10)
+        if res.status_code != 200:
+            print(f"⚠️ API Error Status: {res.status_code}")
+            return
+        data = res.json()
+        list_data = data.get("data", {}).get("list", [])
+        if not list_data: 
+            print("⚠️ API List Empty:", data)
+            return
         latest = list_data[0]
         issue_id = str(latest.get("issueNumber", ""))
         num = int(latest.get("number", latest.get("winningNumber", 0)))
@@ -309,7 +323,9 @@ def fetch_market():
             records.insert(0, {"issueId": issue_id, "number": num, "size": actual_size, "predicted_size": pred["display"], "predNumbers": pred["numbers"]})
             if len(records) > 50: records.pop()
             last_processed_issue = issue_id
-    except Exception as e: pass
+            print(f"✅ Success Fetched Issue: {issue_id} | Signal: {pred['display']}")
+    except Exception as e:
+        print(f"⚠️ Fetch Exception: {e}")
 
 if __name__ == "__main__":
     threading.Thread(target=run_local_server, daemon=True).start()
