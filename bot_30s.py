@@ -1,7 +1,6 @@
 import http.server
 import socketserver
 import os
-import json
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="hi">
@@ -72,7 +71,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // Advanced Logic: Loss Recovery + Current Result Shift + Zigzag Detection
+        // Advanced Multi-Pattern Engine: 2-1 Cluster, Pairs, Mirror, Bounce & Weighted Scoring
         function calculatePrediction(history_list) {
             if (!history_list || history_list.length < 4) {
                 return { display: "BIG", numbers: "7  8", level: 1 };
@@ -83,24 +82,35 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             let recent_sizes = history_list.map(r => r.size);
             let last_actual = recent_sizes[0];
-
             let target = "BIG";
 
-            // Check if market is currently Zigzag (e.g., Small -> Big -> Small or Big -> Small -> Big)
             let is_zigzag = (recent_sizes.length >= 3 && recent_sizes[0] !== recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
+            
+            // Micro-Pattern Check 1: 2-1 Cluster Pattern (e.g., Big, Big, Small -> expect shift or continuation)
+            let is_cluster_2_1 = (recent_sizes.length >= 3 && recent_sizes[0] === recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
+            
+            // Micro-Pattern Check 2: 2-2 Pair Staircase (e.g., Big, Big, Small, Small)
+            let is_pair_staircase = (recent_sizes.length >= 4 && recent_sizes[0] === recent_sizes[1] && recent_sizes[2] === recent_sizes[3] && recent_sizes[0] !== recent_sizes[2]);
+
+            // Micro-Pattern Check 3: Single Bounce Trap (e.g., Big, Big, Small, Big, Big)
+            let is_single_bounce = (recent_sizes.length >= 5 && recent_sizes[0] === recent_sizes[1] && recent_sizes[2] !== recent_sizes[0] && recent_sizes[3] === recent_sizes[0] && recent_sizes[4] === recent_sizes[0]);
 
             if (consecutiveLosses > 0) {
-                // LOSS Recovery Rule: If last trade failed, check market type
-                if (is_zigzag) {
-                    // If zigzag is running, follow zigzag (invert the last actual)
+                if (is_cluster_2_1) {
+                    target = recent_sizes[2]; // Follow the minority break
+                } else if (is_zigzag) {
                     target = last_actual === "BIG" ? "SMALL" : "BIG";
                 } else {
-                    // Otherwise, grab current actual result directly
                     target = last_actual;
                 }
             } else {
-                // Normal Mode: Weighted Scoring + Zigzag awareness
-                if (is_zigzag) {
+                if (is_cluster_2_1) {
+                    target = recent_sizes[2];
+                } else if (is_pair_staircase) {
+                    target = last_actual; // Continue the pair block
+                } else if (is_single_bounce) {
+                    target = recent_sizes[0]; // Ignore the single fake bounce, stick to main trend
+                } else if (is_zigzag) {
                     target = last_actual === "BIG" ? "SMALL" : "BIG";
                 } else {
                     let sample_size = Math.min(10, history_list.length);
@@ -140,6 +150,19 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (!json_data) return;
                 let list = json_data.get?.("data")?.list || json_data.data?.list;
                 if (!list || list.length === 0) return;
+
+                if (lastProcessedIssue === "" && list.length >= 5) {
+                    let loadCount = Math.min(10, list.length);
+                    for (let i = loadCount - 1; i >= 1; i--) {
+                        let past_item = list[i];
+                        let p_issue = String(past_item.issueNumber);
+                        let p_num = parseInt(past_item.number !== undefined ? past_item.number : past_item.winningNumber);
+                        let p_size = p_num >= 5 ? "BIG" : "SMALL";
+                        records.unshift({ issueId: p_issue, number: p_num, size: p_size, predicted_size: p_size, predNumbers: "--" });
+                        historyLog.unshift({ issue: p_issue.slice(-4), num: p_num, size: p_size, status: "📌 PAST" });
+                    }
+                    lastProcessedIssue = String(list[0].issueNumber);
+                }
 
                 let latest = list[0];
                 let issueId = String(latest.issueNumber);
@@ -183,7 +206,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     let next_issue = String(BigInt(issueId) + 1n);
                     let short_next = next_issue.slice(-4);
                     let signal_line = pred.display === "BIG" ? "🟢 Signal: BIG" : "🔴 Signal: SMALL";
-                    let signal_msg = `👑 PREDICTION VIP 👑\\n🏷️ Period: ${short_next}\\n${signal_line}\\n🎯 Target: ${pred.numbers}\\n📊 Plan: Level-${pred.level}`;
+                    let signal_msg = `👑 PREDICTION VIP 30S 👑\\n🏷️ Period: ${short_next}\\n${signal_line}\\n🎯 Target: ${pred.numbers}\\n📊 Plan: Level-${pred.level}`;
 
                     document.getElementById('issue-text').innerText = "पीरियड नंबर: " + short_next + " (" + next_issue + ")";
                     document.getElementById('signal-text').innerText = pred.display;
@@ -223,19 +246,9 @@ HTML_CONTENT = """<!DOCTYPE html>
 class DashboardServer(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-
-        if self.path == '/api/data':
-            self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.end_headers()
-            sample_data = {"status": "active", "platform": "WinGo 30S", "engine": "Loss-Recovery & Zigzag Aware"}
-            self.wfile.write(json.dumps(sample_data).encode('utf-8'))
-        else:
-            self.send_header('Content-type', 'text/html; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(HTML_CONTENT.encode('utf-8'))
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(HTML_CONTENT.encode('utf-8'))
 
     def log_message(self, format, *args):
         pass
