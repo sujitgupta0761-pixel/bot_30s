@@ -1,6 +1,7 @@
 import http.server
 import socketserver
 import os
+import json
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="hi">
@@ -71,7 +72,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // Smart Adaptive Logic + Cluster Pattern (2 Big / 1 Small or Pairs) + Current Status Shift
+        // Advanced Logic: Loss Recovery + Current Result Shift + Zigzag Detection
         function calculatePrediction(history_list) {
             if (!history_list || history_list.length < 4) {
                 return { display: "BIG", numbers: "7  8", level: 1 };
@@ -83,31 +84,33 @@ HTML_CONTENT = """<!DOCTYPE html>
             let recent_sizes = history_list.map(r => r.size);
             let last_actual = recent_sizes[0];
 
-            // 1. Dragon Trend Check (Streak >= 3)
-            let streak = 0;
-            for (let s of recent_sizes) {
-                if (s === last_actual) streak++;
-                else break;
-            }
+            let target = "BIG";
 
-            let target = last_actual;
+            // Check if market is currently Zigzag (e.g., Small -> Big -> Small or Big -> Small -> Big)
+            let is_zigzag = (recent_sizes.length >= 3 && recent_sizes[0] !== recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
 
-            if (streak >= 3) {
-                target = last_actual;
-            } else if (recent_sizes.length >= 3 && recent_sizes[0] === recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]) {
-                // 2-1 Cluster Pattern (e.g., Two Bigs then One Small -> expect shift or continuation)
-                target = recent_sizes[2]; 
-            } else if (recent_sizes.length >= 4 && recent_sizes[0] === recent_sizes[1] && recent_sizes[2] === recent_sizes[3]) {
-                // 2-2 Pair Pattern
-                target = last_actual;
+            if (consecutiveLosses > 0) {
+                // LOSS Recovery Rule: If last trade failed, check market type
+                if (is_zigzag) {
+                    // If zigzag is running, follow zigzag (invert the last actual)
+                    target = last_actual === "BIG" ? "SMALL" : "BIG";
+                } else {
+                    // Otherwise, grab current actual result directly
+                    target = last_actual;
+                }
             } else {
-                // Zigzag Check
-                let is_zigzag = (recent_sizes.length >= 3 && recent_sizes[0] !== recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
+                // Normal Mode: Weighted Scoring + Zigzag awareness
                 if (is_zigzag) {
                     target = last_actual === "BIG" ? "SMALL" : "BIG";
                 } else {
-                    // Current Status Shift (Fallback to latest actual result)
-                    target = last_actual;
+                    let sample_size = Math.min(10, history_list.length);
+                    let big_score = 0, small_score = 0;
+                    for (let i = 0; i < sample_size; i++) {
+                        let weight = sample_size - i;
+                        if (history_list[i].size === "BIG") big_score += weight;
+                        else small_score += weight;
+                    }
+                    target = big_score >= small_score ? "BIG" : "SMALL";
                 }
             }
 
@@ -220,9 +223,19 @@ HTML_CONTENT = """<!DOCTYPE html>
 class DashboardServer(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.end_headers()
-        self.wfile.write(HTML_CONTENT.encode('utf-8'))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+
+        if self.path == '/api/data':
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            sample_data = {"status": "active", "platform": "WinGo 30S", "engine": "Loss-Recovery & Zigzag Aware"}
+            self.wfile.write(json.dumps(sample_data).encode('utf-8'))
+        else:
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(HTML_CONTENT.encode('utf-8'))
 
     def log_message(self, format, *args):
         pass
