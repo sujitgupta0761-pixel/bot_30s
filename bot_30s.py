@@ -71,48 +71,39 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // Markov Chain & Advanced Trend Momentum Algorithm
+        // Smart Adaptive Prediction Logic (Dragon, Zigzag & Current Status Shift)
         function calculatePrediction(history_list) {
-            if (!history_list || history_list.length < 8) {
+            if (!history_list || history_list.length < 4) {
                 return { display: "BIG", numbers: "7  8", level: 1 };
             }
             if (consecutiveLosses >= 3) consecutiveLosses = 0;
             let fib_steps = [1, 1, 2, 3];
             let current_step = fib_steps[Math.min(consecutiveLosses, fib_steps.length - 1)];
 
-            let recent = history_list.slice(0, 10).map(r => r.size);
-            
-            // Dragon Streak Analysis
-            let last_val = recent[0];
+            let recent_sizes = history_list.map(r => r.size);
+            let last_actual = recent_sizes[0];
+
+            // 1. Check Dragon Trend (Streak of 3 or more same results)
             let streak = 0;
-            for (let s of recent) {
-                if (s === last_val) streak++;
+            for (let s of recent_sizes) {
+                if (s === last_actual) streak++;
                 else break;
             }
 
-            let target = last_val;
+            let target = last_actual;
 
-            // If a strong dragon trend is active (3+ streak), strictly follow it
             if (streak >= 3) {
-                target = last_val;
+                // Dragon Active: Strictly follow the dragon trend
+                target = last_actual;
             } else {
-                // Markov Chain Pattern Transition Probability
-                let big_transitions = 0;
-                let small_transitions = 0;
-                for (let i = 0; i < recent.length - 1; i++) {
-                    if (recent[i + 1] === last_val) {
-                        if (recent[i] === "BIG") big_transitions++;
-                        else small_transitions++;
-                    }
-                }
-                
-                if (big_transitions > small_transitions) {
-                    target = "BIG";
-                } else if (small_transitions > big_transitions) {
-                    target = "SMALL";
+                // Check Zigzag Trend (Alternating: A, B, A)
+                let is_zigzag = (recent_sizes.length >= 3 && recent_sizes[0] !== recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
+                if (is_zigzag) {
+                    // Zigzag Active: Predict opposite of current status
+                    target = last_actual === "BIG" ? "SMALL" : "BIG";
                 } else {
-                    let big_count = recent.filter(s => s === "BIG").length;
-                    target = big_count >= 5 ? "BIG" : "SMALL";
+                    // Default / Loss Recovery Shift: Catch the current actual result immediately
+                    target = last_actual;
                 }
             }
 
@@ -175,12 +166,15 @@ HTML_CONTENT = """<!DOCTYPE html>
                         }
                     }
 
-                    let pred = calculatePrediction(records);
-                    let next_issue = String(BigInt(issueId) + 1n);
-                    
-                    records.unshift({ issueId: issueId, number: num, size: actual_size, predicted_size: pred.display, predNumbers: pred.numbers });
+                    // Push new record BEFORE calculating prediction so it becomes the new actual current state
+                    records.unshift({ issueId: issueId, number: num, size: actual_size, predicted_size: "", predNumbers: "" });
                     if (records.length > 50) records.pop();
 
+                    let pred = calculatePrediction(records);
+                    records[0].predicted_size = pred.display;
+                    records[0].predNumbers = pred.numbers;
+
+                    let next_issue = String(BigInt(issueId) + 1n);
                     let short_next = next_issue.slice(-4);
                     let signal_line = pred.display === "BIG" ? "🟢 Signal: BIG" : "🔴 Signal: SMALL";
                     let signal_msg = `👑 PREDICTION VIP 👑\\n🏷️ Period: ${short_next}\\n${signal_line}\\n🎯 Target: ${pred.numbers}\\n📊 Plan: Level-${pred.level}`;
