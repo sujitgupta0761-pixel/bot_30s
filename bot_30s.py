@@ -1,107 +1,6 @@
 import http.server
-import json
 import socketserver
-import threading
-import time
-import requests
-
-TG_BOT_TOKEN = "8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0"
-TG_CHAT_ID = "-1003934563963"
-API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json"
-
-records = []
-consecutive_losses = 0
-last_processed_issue = None
-stats = {"total": 0, "wins": 0, "jackpots": 0, "losses": 0}
-history_log = []
-latest_dashboard_data = {}
-data_lock = threading.Lock()
-
-def calculate_prediction(history_list):
-    global consecutive_losses
-    if not history_list or len(history_list) < 6:
-        return {"display": "BIG", "numbers": "7  8", "level": 1, "bet_size": "Level-1"}
-    
-    if consecutive_losses >= 3: 
-        consecutive_losses = 0
-    
-    fib_steps = [1, 1, 2, 3]
-    current_step = fib_steps[min(consecutive_losses, len(fib_steps)-1)]
-    
-    recent = [r["size"] for r in history_list[:12]]
-    big_count = recent.count("BIG")
-    
-    target = "BIG" if big_count >= 6 else "SMALL"
-    if consecutive_losses >= 1: 
-        target = "SMALL" if target == "BIG" else "BIG"
-
-    digits = [r["number"] for r in history_list[:20]]
-    counts = {i: digits.count(i) for i in range(10)}
-    pool = [5, 6, 7, 8, 9] if target == "BIG" else [0, 1, 2, 3, 4]
-    pool.sort(key=lambda x: counts.get(x, 0), reverse=True)
-    
-    return {"display": target, "numbers": f"{pool[0]}  {pool[1]}", "level": current_step, "bet_size": f"Level-{current_step}"}
-
-def background_worker():
-    global records, consecutive_losses, last_processed_issue, stats, history_log, latest_dashboard_data
-    while True:
-        try:
-            res = requests.get(API_URL, timeout=3)
-            json_data = res.json()
-            latest = json_data.get("data", {}).get("list", [])[0]
-            if latest:
-                issueId = str(latest["issueNumber"])
-                num = int(latest.get("number", latest.get("winningNumber", 0)))
-                
-                if issueId != last_processed_issue:
-                    last_processed_issue = issueId
-                    actual_size = "BIG" if num >= 5 else "SMALL"
-                    result_header = None
-
-                    with data_lock:
-                        if records:
-                            last_pred = records[0].get("predicted_size")
-                            last_nums = [int(n) for n in records[0].get("predNumbers", "").split() if n.isdigit()]
-                            stats["total"] += 1
-                            if last_pred == actual_size and num in last_nums:
-                                consecutive_losses = 0; result_header = "👑 JACKPOT ⚡👑"; stats["jackpots"] += 1; stats["wins"] += 1
-                            elif last_pred == actual_size:
-                                consecutive_losses = 0; result_header = "👑  WIN ⚡👑"; stats["wins"] += 1
-                            else:
-                                consecutive_losses += 1; result_header = "LOSS 🤬💔"; stats["losses"] += 1
-                            
-                            history_log.insert(0, {"issue": issueId[-4:], "num": num, "size": actual_size, "status": result_header})
-                            if len(history_log) > 15: history_log.pop()
-
-                        pred = calculate_prediction(records)
-                        next_issue = str(int(issueId) + 1)
-                        
-                        records.insert(0, {"issueId": issueId, "number": num, "size": actual_size, "predicted_size": pred["display"], "predNumbers": pred["numbers"]})
-                        if len(records) > 50: records.pop()
-
-                        short_next = next_issue[-4:]
-                        signal_line = "🟢 Signal: BIG" if pred["display"] == "BIG" else "🔴 Signal: SMALL"
-                        signal_msg = (f"👑 PREDICTION VIP 👑\n"
-                                      f"🏷️ Period: {short_next}\n"
-                                      f"{signal_line}\n"
-                                      f"🎯 Target: {pred['numbers']}\n"
-                                      f"📊 Plan: {pred['bet_size']}")
-
-                        latest_dashboard_data = {
-                            "issue": f"{short_next} ({next_issue})",
-                            "signal": pred["display"],
-                            "numbers": pred["numbers"],
-                            "level": f"Level-{pred['level']}",
-                            "wins": stats["wins"],
-                            "losses": stats["losses"],
-                            "jackpots": stats["jackpots"],
-                            "history": history_log,
-                            "result_message": result_header,
-                            "signal_message": signal_msg
-                        }
-        except Exception as e:
-            pass
-        time.sleep(1)
+import os
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="hi">
@@ -155,7 +54,13 @@ HTML_CONTENT = """<!DOCTYPE html>
     <script>
         const TG_BOT_TOKEN = "8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0";
         const TG_CHAT_ID = "-1003934563963";
-        let lastProcessedIssueUI = "";
+        const API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json";
+
+        let lastProcessedIssue = "";
+        let consecutiveLosses = 0;
+        let stats = { wins: 0, losses: 0, jackpots: 0 };
+        let historyLog = [];
+        let records = [];
 
         setInterval(() => {
             let now = new Date();
@@ -164,86 +69,142 @@ HTML_CONTENT = """<!DOCTYPE html>
             let m = String(Math.floor(remaining / 60)).padStart(2, '0');
             let s = String(remaining % 60).padStart(2, '0');
             document.getElementById('timer-text').innerText = `${m}:${s}`;
-        }, 500);
+        }, 200);
 
-        async function fetchDashboardData() {
-            try {
-                let res = await fetch('/get_data');
-                let data = await res.json();
-                if (!data.issue) return;
+        function calculatePrediction(history_list) {
+            if (!history_list || history_list.length < 6) {
+                return { display: "BIG", numbers: "7  8", level: 1, bet_size: "Level-1" };
+            }
+            if (consecutiveLosses >= 3) consecutiveLosses = 0;
+            let fib_steps = [1, 1, 2, 3];
+            let current_step = fib_steps[Math.min(consecutiveLosses, fib_steps.length - 1)];
+            
+            let recent = history_list.slice(0, 12).map(r => r.size);
+            let big_count = recent.filter(s => s === "BIG").length;
+            
+            let target = big_count >= 6 ? "BIG" : "SMALL";
+            if (consecutiveLosses >= 1) target = target === "BIG" ? "SMALL" : "BIG";
 
-                document.getElementById('issue-text').innerText = "पीरियड नंबर: " + data.issue;
-                document.getElementById('signal-text').innerText = data.signal;
-                document.getElementById('level-main').innerText = data.level || "LEVEL-1";
-                document.getElementById('numbers-text').innerText = data.numbers;
-                document.getElementById('wins-count').innerText = data.wins;
-                document.getElementById('losses-count').innerText = data.losses;
-                document.getElementById('jackpots-count').innerText = data.jackpots;
+            let digits = history_list.slice(0, 20).map(r => r.number);
+            let pool = target === "BIG" ? [5, 6, 7, 8, 9] : [0, 1, 2, 3, 4];
+            
+            return { display: target, numbers: `${pool[0]}  ${pool[1]}`, level: current_step, bet_size: `Level-${current_step}` };
+        }
 
-                let rows = "";
-                data.history.forEach(item => {
-                    rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td>${item.status}</td></tr>`;
-                });
-                document.getElementById('history-rows').innerHTML = rows;
-
-                // अगर नया पीरियड आया है और Telegram स्विच ON है
-                let currentIssueNum = data.issue.split(' ')[1];
-                if (currentIssueNum !== lastProcessedIssueUI && document.getElementById('tgToggle').checked) {
-                    lastProcessedIssueUI = currentIssueNum;
-
-                    if (data.result_message) {
-                        fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ chat_id: TG_CHAT_ID, text: data.result_message, parse_mode: "Markdown" })
-                        }).catch(err => {});
+        // Auto-retry fetch with Timeout mechanism
+        async function fetchWithRetry(url, retries = 2, timeout = 2500) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), timeout);
+                    let res = await fetch(url, { signal: controller.signal });
+                    clearTimeout(timer);
+                    if (res.ok) {
+                        return await res.json();
                     }
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                }
+            }
+        }
 
-                    // 5 सेकंड का डिले सिर्फ सिग्नल से पहले
-                    setTimeout(() => {
-                        if (document.getElementById('tgToggle').checked) {
+        async function fetchAndProcess() {
+            try {
+                let json_data = await fetchWithRetry(API_URL);
+                if (!json_data) return;
+                let list = json_data.get?.("data")?.list || json_data.data?.list;
+                if (!list || list.length === 0) return;
+
+                let latest = list[0];
+                let issueId = String(latest.issueNumber);
+                let num = parseInt(latest.number !== undefined ? latest.number : latest.winningNumber);
+
+                if (issueId !== lastProcessedIssue) {
+                    lastProcessedIssue = issueId;
+                    let actual_size = num >= 5 ? "BIG" : "SMALL";
+                    let result_header = null;
+
+                    if (records.length > 0) {
+                        let last_pred = records[0].predicted_size;
+                        let last_nums = records[0].predNumbers.split(' ').map(Number);
+                        if (last_pred === actual_size && last_nums.includes(num)) {
+                            consecutiveLosses = 0; result_header = "👑 JACKPOT ⚡👑"; stats.jackpots++; stats.wins++;
+                        } else if (last_pred === actual_size) {
+                            consecutiveLosses = 0; result_header = "👑  WIN ⚡👑"; stats.wins++;
+                        } else {
+                            consecutiveLosses++; result_header = "LOSS 🤬💔"; stats.losses++;
+                        }
+                        
+                        historyLog.unshift({ issue: issueId.slice(-4), num: num, size: actual_size, status: result_header });
+                        if (historyLog.length > 15) historyLog.pop();
+
+                        if (document.getElementById('tgToggle').checked && result_header) {
                             fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: data.signal_message, parse_mode: "Markdown" })
+                                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: result_header, parse_mode: "Markdown" })
                             }).catch(err => {});
                         }
-                    }, 5000);
+                    }
+
+                    let pred = calculatePrediction(records);
+                    let next_issue = String(BigInt(issueId) + 1n);
+                    
+                    records.unshift({ issueId: issueId, number: num, size: actual_size, predicted_size: pred.display, predNumbers: pred.numbers });
+                    if (records.length > 50) records.pop();
+
+                    let short_next = next_issue.slice(-4);
+                    let signal_line = pred.display === "BIG" ? "🟢 Signal: BIG" : "🔴 Signal: SMALL";
+                    let signal_msg = `👑 PREDICTION VIP 👑\\n🏷️ Period: ${short_next}\\n${signal_line}\\n🎯 Target: ${pred.numbers}\\n📊 Plan: Level-${pred.level}`;
+
+                    document.getElementById('issue-text').innerText = "पीरियड नंबर: " + short_next + " (" + next_issue + ")";
+                    document.getElementById('signal-text').innerText = pred.display;
+                    document.getElementById('level-main').innerText = "LEVEL-" + pred.level;
+                    document.getElementById('numbers-text').innerText = pred.numbers;
+                    document.getElementById('wins-count').innerText = stats.wins;
+                    document.getElementById('losses-count').innerText = stats.losses;
+                    document.getElementById('jackpots-count').innerText = stats.jackpots;
+
+                    let rows = "";
+                    historyLog.forEach(item => {
+                        rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td>${item.status}</td></tr>`;
+                    });
+                    document.getElementById('history-rows').innerHTML = rows || '<tr><td colspan="4">डाटा सिंक हो रहा है...</td></tr>';
+
+                    if (document.getElementById('tgToggle').checked) {
+                        setTimeout(() => {
+                            if (document.getElementById('tgToggle').checked) {
+                                fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: signal_msg, parse_mode: "Markdown" })
+                                }).catch(err => {});
+                            }
+                        }, 2000);
+                    }
                 }
             } catch (e) {}
         }
 
-        setInterval(fetchDashboardData, 1000);
-        fetchDashboardData();
+        // Millisecond Syncing: Poll every 300ms with Auto-retry protection
+        setInterval(fetchAndProcess, 300);
+        fetchAndProcess();
     </script>
 </body>
 </html>"""
 
 class DashboardServer(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        global latest_dashboard_data
-        if self.path == '/' or self.path == '/index.html':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(HTML_CONTENT.encode('utf-8'))
-        elif self.path == '/get_data':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.end_headers()
-            with data_lock:
-                self.wfile.write(json.dumps(latest_dashboard_data, ensure_ascii=False).encode('utf-8'))
-        else:
-            self.send_response(404)
-            self.end_headers()
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(HTML_CONTENT.encode('utf-8'))
 
     def log_message(self, format, *args):
         pass
 
 def run_server():
-    import os
     PORT = int(os.environ.get("PORT", 8000))
-    threading.Thread(target=background_worker, daemon=True).start()
     with socketserver.TCPServer(("", PORT), DashboardServer) as httpd:
         print(f"🌐 30S Server Live on port {PORT}")
         httpd.serve_forever()
