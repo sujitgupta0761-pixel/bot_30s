@@ -71,7 +71,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // Smart Adaptive Prediction Logic (Dragon, Zigzag & Current Status Shift)
+        // Smart Adaptive Logic + Cluster Pattern (2 Big / 1 Small or Pairs) + Current Status Shift
         function calculatePrediction(history_list) {
             if (!history_list || history_list.length < 4) {
                 return { display: "BIG", numbers: "7  8", level: 1 };
@@ -83,7 +83,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             let recent_sizes = history_list.map(r => r.size);
             let last_actual = recent_sizes[0];
 
-            // 1. Check Dragon Trend (Streak of 3 or more same results)
+            // 1. Dragon Trend Check (Streak >= 3)
             let streak = 0;
             for (let s of recent_sizes) {
                 if (s === last_actual) streak++;
@@ -93,16 +93,20 @@ HTML_CONTENT = """<!DOCTYPE html>
             let target = last_actual;
 
             if (streak >= 3) {
-                // Dragon Active: Strictly follow the dragon trend
+                target = last_actual;
+            } else if (recent_sizes.length >= 3 && recent_sizes[0] === recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]) {
+                // 2-1 Cluster Pattern (e.g., Two Bigs then One Small -> expect shift or continuation)
+                target = recent_sizes[2]; 
+            } else if (recent_sizes.length >= 4 && recent_sizes[0] === recent_sizes[1] && recent_sizes[2] === recent_sizes[3]) {
+                // 2-2 Pair Pattern
                 target = last_actual;
             } else {
-                // Check Zigzag Trend (Alternating: A, B, A)
+                // Zigzag Check
                 let is_zigzag = (recent_sizes.length >= 3 && recent_sizes[0] !== recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
                 if (is_zigzag) {
-                    // Zigzag Active: Predict opposite of current status
                     target = last_actual === "BIG" ? "SMALL" : "BIG";
                 } else {
-                    // Default / Loss Recovery Shift: Catch the current actual result immediately
+                    // Current Status Shift (Fallback to latest actual result)
                     target = last_actual;
                 }
             }
@@ -166,7 +170,6 @@ HTML_CONTENT = """<!DOCTYPE html>
                         }
                     }
 
-                    // Push new record BEFORE calculating prediction so it becomes the new actual current state
                     records.unshift({ issueId: issueId, number: num, size: actual_size, predicted_size: "", predNumbers: "" });
                     if (records.length > 50) records.pop();
 
