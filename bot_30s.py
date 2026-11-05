@@ -71,27 +71,57 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
+        // Markov Chain & Advanced Trend Momentum Algorithm
         function calculatePrediction(history_list) {
-            if (!history_list || history_list.length < 6) {
-                return { display: "BIG", numbers: "7  8", level: 1, bet_size: "Level-1" };
+            if (!history_list || history_list.length < 8) {
+                return { display: "BIG", numbers: "7  8", level: 1 };
             }
             if (consecutiveLosses >= 3) consecutiveLosses = 0;
             let fib_steps = [1, 1, 2, 3];
             let current_step = fib_steps[Math.min(consecutiveLosses, fib_steps.length - 1)];
-            
-            let recent = history_list.slice(0, 12).map(r => r.size);
-            let big_count = recent.filter(s => s === "BIG").length;
-            
-            let target = big_count >= 6 ? "BIG" : "SMALL";
-            if (consecutiveLosses >= 1) target = target === "BIG" ? "SMALL" : "BIG";
 
-            let digits = history_list.slice(0, 20).map(r => r.number);
-            let pool = target === "BIG" ? [5, 6, 7, 8, 9] : [0, 1, 2, 3, 4];
+            let recent = history_list.slice(0, 10).map(r => r.size);
             
-            return { display: target, numbers: `${pool[0]}  ${pool[1]}`, level: current_step, bet_size: `Level-${current_step}` };
+            // Dragon Streak Analysis
+            let last_val = recent[0];
+            let streak = 0;
+            for (let s of recent) {
+                if (s === last_val) streak++;
+                else break;
+            }
+
+            let target = last_val;
+
+            // If a strong dragon trend is active (3+ streak), strictly follow it
+            if (streak >= 3) {
+                target = last_val;
+            } else {
+                // Markov Chain Pattern Transition Probability
+                let big_transitions = 0;
+                let small_transitions = 0;
+                for (let i = 0; i < recent.length - 1; i++) {
+                    if (recent[i + 1] === last_val) {
+                        if (recent[i] === "BIG") big_transitions++;
+                        else small_transitions++;
+                    }
+                }
+                
+                if (big_transitions > small_transitions) {
+                    target = "BIG";
+                } else if (small_transitions > big_transitions) {
+                    target = "SMALL";
+                } else {
+                    let big_count = recent.filter(s => s === "BIG").length;
+                    target = big_count >= 5 ? "BIG" : "SMALL";
+                }
+            }
+
+            let pool = target === "BIG" ? [6, 7, 8, 9] : [0, 1, 2, 3];
+            let lucky_nums = `${pool[Math.floor(Math.random()*pool.length)]}  ${pool[Math.floor(Math.random()*pool.length)]}`;
+            
+            return { display: target, numbers: lucky_nums, level: current_step };
         }
 
-        // Auto-retry fetch with Timeout mechanism
         async function fetchWithRetry(url, retries = 2, timeout = 2500) {
             for (let i = 0; i < retries; i++) {
                 try {
@@ -99,9 +129,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     const timer = setTimeout(() => controller.abort(), timeout);
                     let res = await fetch(url, { signal: controller.signal });
                     clearTimeout(timer);
-                    if (res.ok) {
-                        return await res.json();
-                    }
+                    if (res.ok) return await res.json();
                 } catch (err) {
                     if (i === retries - 1) throw err;
                 }
@@ -186,7 +214,6 @@ HTML_CONTENT = """<!DOCTYPE html>
             } catch (e) {}
         }
 
-        // Millisecond Syncing: Poll every 300ms with Auto-retry protection
         setInterval(fetchAndProcess, 300);
         fetchAndProcess();
     </script>
