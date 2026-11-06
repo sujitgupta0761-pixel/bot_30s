@@ -41,7 +41,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="pattern-box" id="pattern-text">Loss-Flip Logic Active...</div>
+        <div class="pattern-box" id="pattern-text">3-Round Trend Active...</div>
         <div class="signal-box" id="signal-text">--</div>
         <div class="stats-row">
             <span style="color: #22c55e;">जीत (Win): <span id="wins-count">0</span></span>
@@ -82,7 +82,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         let historyLog = [];
         let records = [];
         let stats = { wins: 0, losses: 0 };
-        let flipOnLoss = false;
+        let shiftToCurrent = false;
         
         let lockedPeriod = "";
         let lockedPrediction = null;
@@ -130,18 +130,29 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
+        // 3-Round Trend & Loss-Shift Logic
         function analyzeMarketPattern(history_list) {
-            if (!history_list || history_list.length < 2) {
+            if (!history_list || history_list.length < 3) {
                 return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
             }
-            let recent = history_list.map(r => r.size);
-            let base_pred = recent[0];
+            let recent = history_list.slice(0, 3).map(r => r.size);
 
-            if (flipOnLoss) {
-                let flipped_pred = (base_pred === "BIG") ? "SMALL" : "BIG";
-                return { prediction: flipped_pred, pattern: "🔄 LOSS-FLIP (" + flipped_pred + ")" };
+            if (shiftToCurrent) {
+                // Loss hone ke baad turant current result par shift
+                let pred = recent[0];
+                return { prediction: pred, pattern: "🎯 SHIFT TO CURRENT (" + pred + ")" };
+            }
+
+            // Pichle 3 rounds ke aadhar par trend check karna
+            if (recent[0] === recent[1] && recent[1] === recent[2]) {
+                return { prediction: recent[0], pattern: "🐉 3-ROUND DRAGON (" + recent[0] + ")" };
+            } else if (recent[0] !== recent[1] && recent[1] !== recent[2]) {
+                let pred = recent[0] === "BIG" ? "SMALL" : "BIG";
+                return { prediction: pred, pattern: "⚡ 3-ROUND ZIG-ZAG (" + pred + ")" };
             } else {
-                return { prediction: base_pred, pattern: "⚡ NORMAL TREND (" + base_pred + ")" };
+                let big_count = recent.filter(s => s === "BIG").length;
+                let pred = big_count >= 2 ? "BIG" : "SMALL";
+                return { prediction: pred, pattern: "📊 3-ROUND MAJORITY (" + pred + ")" };
             }
         }
 
@@ -189,11 +200,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                         if (last_pred === actual_size) {
                             stats.wins++;
                             result_status = "👑  WIN ⚡👑";
-                            flipOnLoss = false;
+                            shiftToCurrent = false; // Win hone par wapas 3-round pattern mode par aa jao
                         } else {
                             stats.losses++;
                             result_status = "LOSS 🤬💔";
-                            flipOnLoss = true;
+                            shiftToCurrent = true; // Loss hone par current result par shift active
                         }
 
                         if (document.getElementById('tgToggle').checked) {
