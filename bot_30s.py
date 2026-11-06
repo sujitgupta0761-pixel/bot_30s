@@ -22,16 +22,14 @@ HTML_CONTENT = """<!DOCTYPE html>
         .tg-control { font-size: 12px; display: flex; align-items: center; gap: 6px; color: #38bdf8; font-weight: bold; }
         .info-row { display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.8); padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; font-size: 13px; }
         .timer-badge { background: rgba(251, 191, 36, 0.2); color: var(--accent-gold); padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 14px; font-weight: bold; }
-        .level-box { background: #1e1b4b; border: 1px solid #475569; color: #facc15; font-weight: 800; padding: 10px; border-radius: 10px; font-size: 16px; margin-bottom: 12px; }
-        .signal-box { font-size: 56px; font-weight: 900; margin: 10px 0; padding: 16px; border-radius: 14px; background: #000; letter-spacing: 3px; color: #fff; }
-        .numbers-display { font-size: 15px; margin: 12px 0; background: #1e293b; padding: 10px; border-radius: 10px; color: #38bdf8; }
-        .stats { display: flex; justify-content: space-around; margin: 14px 0; background: #1e293b; padding: 10px; border-radius: 10px; font-size: 12px; color: #fff; }
-        .table-container { max-height: 160px; overflow-y: auto; border-radius: 8px; border: 1px solid #475569; }
+        .pattern-box { background: #1e1b4b; border: 1px solid #475569; color: #facc15; font-weight: 800; padding: 8px; border-radius: 10px; font-size: 13px; margin-bottom: 10px; }
+        .signal-box { font-size: 48px; font-weight: 900; margin: 10px 0; padding: 14px; border-radius: 14px; background: #000; letter-spacing: 2px; color: #38bdf8; }
+        .table-container { max-height: 160px; overflow-y: auto; border-radius: 8px; border: 1px solid #475569; margin-top: 10px; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; color: #fff; }
         th, td { padding: 8px; border-bottom: 1px solid #1e293b; text-align: center; }
         th { background: #0f172a; color: #38bdf8; position: sticky; top: 0; }
-        .footer-panel { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; background: rgba(56, 189, 248, 0.1); padding: 6px 10px; border-radius: 8px; }
-        .admin-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 4px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .footer-panel { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; font-size: 12px; background: rgba(56, 189, 248, 0.1); padding: 8px 12px; border-radius: 8px; }
+        .admin-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 5px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -42,19 +40,13 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="level-box"><div id="level-main">DATA SYNCING...</div></div>
+        <div class="pattern-box" id="pattern-text">पैटर्न स्कैन हो रहा है...</div>
         <div class="signal-box" id="signal-text">--</div>
-        <div class="numbers-display">गोल्डन नंबर: <strong id="numbers-text" style="color: #facc15;">-- --</strong></div>
-        <div class="stats">
-            <div>जीत <span id="wins-count">0</span></div>
-            <div>हार <span id="losses-count">0</span></div>
-            <div>जैकपॉट <span id="jackpots-count">0</span></div>
-        </div>
-        <h3>हालिया इतिहास</h3>
+        <h3>लाइव मार्केट इतिहास</h3>
         <div class="table-container">
             <table>
-                <thead><tr><th>पीरियड</th><th>नंबर</th><th>साइज</th><th>स्टेटस</th></tr></thead>
-                <tbody id="history-rows"><tr><td colspan="4">डाटा सिंक हो रहा है...</td></tr></tbody>
+                <thead><tr><th>पीरियड</th><th>नंबर</th><th>साइज</th></tr></thead>
+                <tbody id="history-rows"><tr><td colspan="3">डाटा सिंक हो रहा है...</td></tr></tbody>
             </table>
         </div>
         <div class="footer-panel">
@@ -68,26 +60,25 @@ HTML_CONTENT = """<!DOCTYPE html>
         const API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json";
         const TG_PASSWORD = "8709";
 
-        // Auto Name Prompt if not in URL
         let urlParams = new URLSearchParams(window.location.search);
         let userName = urlParams.get('user');
         if (!userName || userName.trim() === "") {
+            userName = localStorage.getItem("bsnl_user_name");
+        }
+        if (!userName || userName.trim() === "" || userName === "null") {
             userName = prompt("🔒 सुरक्षा जाँच: कृपया अपना असली नाम दर्ज करें:");
             if (!userName || userName.trim() === "") {
                 userName = "Guest_" + Math.floor(Math.random() * 1000);
             }
-            let newUrl = window.location.pathname + "?user=" + encodeURIComponent(userName);
-            window.history.replaceState({}, '', newUrl);
         }
+        localStorage.setItem("bsnl_user_name", userName);
 
         let lastProcessedIssue = "";
-        let consecutiveLosses = 0;
-        let stats = { wins: 0, losses: 0, jackpots: 0 };
         let historyLog = [];
         let records = [];
-        
         let lockedPeriod = "";
         let lockedPrediction = null;
+        let lockedPattern = "";
 
         setInterval(() => {
             fetch('/ping?user=' + encodeURIComponent(userName)).then(res => res.json()).then(data => {
@@ -131,42 +122,28 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        function calculatePrediction(history_list) {
-            if (!history_list || history_list.length < 3) return null;
-            if (consecutiveLosses >= 3) consecutiveLosses = 0;
-            let fib_steps = [1, 1, 2, 3];
-            let current_step = fib_steps[Math.min(consecutiveLosses, fib_steps.length - 1)];
+        function analyzeMarketPattern(history_list) {
+            if (!history_list || history_list.length < 4) {
+                return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
+            }
+            let recent = history_list.map(r => r.size);
 
-            let recent_sizes = history_list.map(r => r.size);
-            let last_actual = recent_sizes[0];
-            let target = "BIG";
-
-            let is_zigzag = (recent_sizes.length >= 3 && recent_sizes[0] !== recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
-            let is_cluster_2_1 = (recent_sizes.length >= 3 && recent_sizes[0] === recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
-
-            if (consecutiveLosses > 0) {
-                if (is_cluster_2_1) target = recent_sizes[2];
-                else if (is_zigzag) target = last_actual === "BIG" ? "SMALL" : "BIG";
-                else target = last_actual;
-            } else {
-                if (is_cluster_2_1) target = recent_sizes[2];
-                else if (is_zigzag) target = last_actual === "BIG" ? "SMALL" : "BIG";
-                else {
-                    let sample_size = Math.min(10, history_list.length);
-                    let big_score = 0, small_score = 0;
-                    for (let i = 0; i < sample_size; i++) {
-                        let weight = sample_size - i;
-                        if (history_list[i].size === "BIG") big_score += weight;
-                        else small_score += weight;
-                    }
-                    target = big_score >= small_score ? "BIG" : "SMALL";
-                }
+            // 1. Dragon Pattern (लगातार एक ही साइज: जैसे BIG, BIG, BIG)
+            if (recent[0] === recent[1] && recent[1] === recent[2]) {
+                return { prediction: recent[0], pattern: "🐉 DRAGON (" + recent[0] + ")" };
             }
 
-            let pool = target === "BIG" ? [6, 7, 8, 9] : [0, 1, 2, 3];
-            let lucky_nums = `${pool[Math.floor(Math.random()*pool.length)]}  ${pool[Math.floor(Math.random()*pool.length)]}`;
-            
-            return { display: target, numbers: lucky_nums, level: current_step };
+            // 2. Zig-Zag Pattern (उल्टा-पुल्टा: जैसे BIG, SMALL, BIG, SMALL)
+            let is_zigzag = (recent[0] !== recent[1] && recent[1] !== recent[2] && recent[2] !== recent[3]);
+            if (is_zigzag) {
+                let next_pred = recent[0] === "BIG" ? "SMALL" : "BIG";
+                return { prediction: next_pred, pattern: "⚡ ZIG-ZAG PATTERN" };
+            }
+
+            // 3. Mixed Trend (Frequency Check)
+            let big_count = recent.slice(0, 4).filter(s => s === "BIG").length;
+            let pred = big_count >= 2 ? "BIG" : "SMALL";
+            return { prediction: pred, pattern: "📊 MIXED TREND" };
         }
 
         async function fetchWithRetry(url, retries = 2, timeout = 2500) {
@@ -191,14 +168,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (!list || list.length === 0) return;
 
                 if (lastProcessedIssue === "" && list.length >= 5) {
-                    let loadCount = Math.min(10, list.length);
-                    for (let i = loadCount - 1; i >= 1; i--) {
-                        let past_item = list[i];
-                        let p_issue = String(past_item.issueNumber);
-                        let p_num = parseInt(past_item.number !== undefined ? past_item.number : past_item.winningNumber);
-                        let p_size = p_num >= 5 ? "BIG" : "SMALL";
-                        records.unshift({ issueId: p_issue, number: p_num, size: p_size, predicted_size: p_size, predNumbers: "--" });
-                        historyLog.unshift({ issue: p_issue.slice(-4), num: p_num, size: p_size, status: "📌 PAST" });
+                    for (let i = Math.min(10, list.length) - 1; i >= 0; i--) {
+                        let p_item = list[i];
+                        let p_num = parseInt(p_item.number !== undefined ? p_item.number : p_item.winningNumber);
+                        records.unshift({ size: p_num >= 5 ? "BIG" : "SMALL" });
                     }
                     lastProcessedIssue = String(list[0].issueNumber);
                 }
@@ -210,84 +183,51 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (issueId !== lastProcessedIssue) {
                     lastProcessedIssue = issueId;
                     let actual_size = num >= 5 ? "BIG" : "SMALL";
-                    let result_header = null;
+                    records.unshift({ size: actual_size });
+                    if (records.length > 30) records.pop();
 
-                    if (records.length > 0) {
-                        let last_pred = records[0].predicted_size;
-                        let last_nums = records[0].predNumbers.split(' ').map(Number);
-                        if (last_pred && last_pred !== "--") {
-                            if (last_pred === actual_size && last_nums.includes(num)) {
-                                consecutiveLosses = 0; result_header = "👑 JACKPOT ⚡👑"; stats.jackpots++; stats.wins++;
-                            } else if (last_pred === actual_size) {
-                                consecutiveLosses = 0; result_header = "👑  WIN ⚡👑"; stats.wins++;
-                            } else {
-                                consecutiveLosses++; result_header = "LOSS 🤬💔"; stats.losses++;
-                            }
-                            historyLog.unshift({ issue: issueId.slice(-4), num: num, size: actual_size, status: result_header });
-                            if (historyLog.length > 15) historyLog.pop();
+                    historyLog.unshift({ issue: issueId.slice(-4), num: num, size: actual_size });
+                    if (historyLog.length > 20) historyLog.pop();
 
-                            if (document.getElementById('tgToggle').checked && result_header) {
-                                fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: result_header, parse_mode: "Markdown" })
-                                }).catch(err => {});
-                            }
-                        }
-                    }
-
-                    records.unshift({ issueId: issueId, number: num, size: actual_size, predicted_size: "", predNumbers: "" });
-                    if (records.length > 50) records.pop();
-                    lockedPrediction = null;
+                    lockedPrediction = null; // नया पीरियड शुरू होते ही लॉक रीसेट
                 }
 
                 let next_issue = String(BigInt(issueId) + 1n);
                 let short_next = next_issue.slice(-4);
 
                 if (lockedPeriod !== short_next) {
-                    let pred = calculatePrediction(records);
-                    if (pred) {
+                    let result = analyzeMarketPattern(records);
+                    if (result.prediction !== "WAITING") {
                         lockedPeriod = short_next;
-                        lockedPrediction = pred;
-                        records[0].predicted_size = pred.display;
-                        records[0].predNumbers = pred.numbers;
+                        lockedPrediction = result.prediction;
+                        lockedPattern = result.pattern;
 
                         if (document.getElementById('tgToggle').checked) {
-                            let signal_line = pred.display === "BIG" ? "🟢 Signal: BIG" : "🔴 Signal: SMALL";
-                            let signal_msg = `👑 PREDICTION VIP 👑\\n🏷️ Period: ${short_next}\\n${signal_line}\\n🎯 Target: ${pred.numbers}\\n📊 Plan: Level-${pred.level}`;
-                            setTimeout(() => {
-                                if (document.getElementById('tgToggle').checked) {
-                                    fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ chat_id: TG_CHAT_ID, text: signal_msg, parse_mode: "Markdown" })
-                                    }).catch(err => {});
-                                }
-                            }, 2000);
+                            let msg = `👑 BSNV VIP SIGNAL 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}`;
+                            fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: msg, parse_mode: "Markdown" })
+                            }).catch(err => {});
                         }
                     }
                 }
 
                 if (lockedPrediction) {
-                    document.getElementById('signal-text').innerText = lockedPrediction.display;
-                    document.getElementById('level-main').innerText = "LEVEL-" + lockedPrediction.level;
-                    document.getElementById('numbers-text').innerText = lockedPrediction.numbers;
+                    document.getElementById('signal-text').innerText = lockedPrediction === "BIG" ? "🟢 BIG" : "🔴 SMALL";
+                    document.getElementById('pattern-text').innerText = lockedPattern;
                 } else {
-                    document.getElementById('signal-text').innerText = "--";
-                    document.getElementById('level-main').innerText = "DATA SYNCING...";
-                    document.getElementById('numbers-text').innerText = "-- --";
+                    document.getElementById('signal-text').innerText = "WAITING";
+                    document.getElementById('pattern-text').innerText = "पैटर्न स्कैन हो रहा है...";
                 }
 
-                document.getElementById('issue-text').innerText = "पीरियड नंबर: " + short_next + " (" + next_issue + ")";
-                document.getElementById('wins-count').innerText = stats.wins;
-                document.getElementById('losses-count').innerText = stats.losses;
-                document.getElementById('jackpots-count').innerText = stats.jackpots;
+                document.getElementById('issue-text').innerText = "पीरियड नंबर: " + short_next;
 
                 let rows = "";
                 historyLog.forEach(item => {
-                    rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td>${item.status}</td></tr>`;
+                    rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td></tr>`;
                 });
-                document.getElementById('history-rows').innerHTML = rows || '<tr><td colspan="4">डाटा सिंक हो रहा है...</td></tr>';
+                document.getElementById('history-rows').innerHTML = rows || '<tr><td colspan="3">डाटा सिंक हो रहा है...</td></tr>';
 
             } catch (e) {}
         }
@@ -305,7 +245,12 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
         query = parse_qs(parsed_path.query)
         client_ip = self.client_address[0]
         
-        user_name = query.get('user', ['Guest'])[0]
+        user_name = query.get('user', [''])[0]
+        if not user_name:
+            user_name = active_sessions.get(client_ip, {}).get("name", "Guest")
+        
+        if user_name != "Guest":
+            active_sessions[client_ip] = {"time": time.time(), "name": user_name}
 
         if client_ip in blocked_ips:
             self.send_response(403)
@@ -314,9 +259,11 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'{"blocked": true}')
             return
 
-        active_sessions[client_ip] = {"time": time.time(), "name": user_name}
+        if client_ip not in active_sessions:
+            active_sessions[client_ip] = {"time": time.time(), "name": user_name if user_name else "Guest"}
+
         current_time = time.time()
-        inactive_ips = [ip for ip, data in active_sessions.items() if current_time - data["time"] > 15]
+        inactive_ips = [ip for ip, data in active_sessions.items() if current_time - data["time"] > 20]
         for ip in inactive_ips:
             del active_sessions[ip]
 
