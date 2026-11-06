@@ -35,7 +35,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="level-box"><div id="level-main">LEVEL-1</div></div>
+        <div class="level-box"><div id="level-main">DATA SYNCING...</div></div>
         <div class="signal-box" id="signal-text">--</div>
         <div class="numbers-display">गोल्डन नंबर: <strong id="numbers-text" style="color: #facc15;">-- --</strong></div>
         <div class="stats">
@@ -87,14 +87,36 @@ HTML_CONTENT = """<!DOCTYPE html>
         }, 200);
 
         function calculatePrediction(history_list) {
-            if (!history_list || history_list.length < 2) return null;
+            if (!history_list || history_list.length < 3) return null;
             if (consecutiveLosses >= 3) consecutiveLosses = 0;
             let fib_steps = [1, 1, 2, 3];
             let current_step = fib_steps[Math.min(consecutiveLosses, fib_steps.length - 1)];
 
-            let latest = history_list[0].size;
-            let previous = history_list[1].size;
-            let target = (consecutiveLosses > 0) ? latest : (latest === previous ? latest : (latest === "BIG" ? "SMALL" : "BIG"));
+            let recent_sizes = history_list.map(r => r.size);
+            let last_actual = recent_sizes[0];
+            let target = "BIG";
+
+            let is_zigzag = (recent_sizes.length >= 3 && recent_sizes[0] !== recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
+            let is_cluster_2_1 = (recent_sizes.length >= 3 && recent_sizes[0] === recent_sizes[1] && recent_sizes[1] !== recent_sizes[2]);
+
+            if (consecutiveLosses > 0) {
+                if (is_cluster_2_1) target = recent_sizes[2];
+                else if (is_zigzag) target = last_actual === "BIG" ? "SMALL" : "BIG";
+                else target = last_actual;
+            } else {
+                if (is_cluster_2_1) target = recent_sizes[2];
+                else if (is_zigzag) target = last_actual === "BIG" ? "SMALL" : "BIG";
+                else {
+                    let sample_size = Math.min(10, history_list.length);
+                    let big_score = 0, small_score = 0;
+                    for (let i = 0; i < sample_size; i++) {
+                        let weight = sample_size - i;
+                        if (history_list[i].size === "BIG") big_score += weight;
+                        else small_score += weight;
+                    }
+                    target = big_score >= small_score ? "BIG" : "SMALL";
+                }
+            }
 
             let pool = target === "BIG" ? [6, 7, 8, 9] : [0, 1, 2, 3];
             let lucky_nums = `${pool[Math.floor(Math.random()*pool.length)]}  ${pool[Math.floor(Math.random()*pool.length)]}`;
@@ -102,39 +124,37 @@ HTML_CONTENT = """<!DOCTYPE html>
             return { display: target, numbers: lucky_nums, level: current_step };
         }
 
-        // Ultra-fast fetch with minimal timeout
-        async function fetchWithLightning(url) {
-            try {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 1200);
-                let res = await fetch(url, { signal: controller.signal });
-                clearTimeout(timer);
-                if (res.ok) return await res.json();
-            } catch (err) {}
-            return null;
+        async function fetchWithRetry(url, retries = 2, timeout = 2500) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), timeout);
+                    let res = await fetch(url, { signal: controller.signal });
+                    clearTimeout(timer);
+                    if (res.ok) return await res.json();
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                }
+            }
         }
 
         async function fetchAndProcess() {
             try {
-                let json_data = await fetchWithLightning(API_URL);
+                let json_data = await fetchWithRetry(API_URL);
                 if (!json_data) return;
                 let list = json_data.get?.("data")?.list || json_data.data?.list;
                 if (!list || list.length === 0) return;
 
-                if (lastProcessedIssue === "" && list.length >= 3) {
+                if (lastProcessedIssue === "" && list.length >= 5) {
                     let loadCount = Math.min(10, list.length);
-                    let tempHistory = [];
-                    let tempRecords = [];
                     for (let i = loadCount - 1; i >= 1; i--) {
                         let past_item = list[i];
                         let p_issue = String(past_item.issueNumber);
                         let p_num = parseInt(past_item.number !== undefined ? past_item.number : past_item.winningNumber);
                         let p_size = p_num >= 5 ? "BIG" : "SMALL";
-                        tempRecords.unshift({ issueId: p_issue, number: p_num, size: p_size, predicted_size: p_size, predNumbers: "--" });
-                        tempHistory.unshift({ issue: p_issue.slice(-4), num: p_num, size: p_size, status: "📌 PAST" });
+                        records.unshift({ issueId: p_issue, number: p_num, size: p_size, predicted_size: p_size, predNumbers: "--" });
+                        historyLog.unshift({ issue: p_issue.slice(-4), num: p_num, size: p_size, status: "📌 PAST" });
                     }
-                    records = tempRecords;
-                    historyLog = tempHistory;
                     lastProcessedIssue = String(list[0].issueNumber);
                 }
 
@@ -183,9 +203,24 @@ HTML_CONTENT = """<!DOCTYPE html>
                     records[0].predicted_size = pred.display;
                     records[0].predNumbers = pred.numbers;
 
+                    let signal_line = pred.display === "BIG" ? "🟢 Signal: BIG" : "🔴 Signal: SMALL";
+                    let signal_msg = `👑 PREDICTION VIP 👑\\n🏷️ Period: ${short_next}\\n${signal_line}\\n🎯 Target: ${pred.numbers}\\n📊 Plan: Level-${pred.level}`;
+
                     document.getElementById('signal-text').innerText = pred.display;
                     document.getElementById('level-main').innerText = "LEVEL-" + pred.level;
                     document.getElementById('numbers-text').innerText = pred.numbers;
+
+                    if (document.getElementById('tgToggle').checked) {
+                        setTimeout(() => {
+                            if (document.getElementById('tgToggle').checked) {
+                                fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: signal_msg, parse_mode: "Markdown" })
+                                }).catch(err => {});
+                            }
+                        }, 2000);
+                    }
                 } else {
                     document.getElementById('signal-text').innerText = "--";
                     document.getElementById('level-main').innerText = "DATA SYNCING...";
