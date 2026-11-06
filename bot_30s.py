@@ -129,25 +129,30 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
+        // Advanced 4-Round Deep Pattern Analysis Engine
         function analyzeMarketPattern(history_list) {
             if (!history_list || history_list.length < 4) {
                 return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
             }
-            let recent = history_list.map(r => r.size);
+            // पिछले 4 राउंड्स के परिणाम (Index 0 सबसे ताज़ा है)
+            let recent = history_list.slice(0, 4).map(r => r.size);
 
+            // 1. Dragon Pattern (पिछले 4 या कम से कम 3 लगातार एक जैसे)
             if (recent[0] === recent[1] && recent[1] === recent[2]) {
                 return { prediction: recent[0], pattern: "🐉 DRAGON (" + recent[0] + ")" };
             }
 
+            // 2. Zig-Zag Pattern (बारी-बारी से उलटा चलना)
             let is_zigzag = (recent[0] !== recent[1] && recent[1] !== recent[2] && recent[2] !== recent[3]);
             if (is_zigzag) {
                 let next_pred = recent[0] === "BIG" ? "SMALL" : "BIG";
                 return { prediction: next_pred, pattern: "⚡ ZIG-ZAG PATTERN" };
             }
 
-            let big_count = recent.slice(0, 4).filter(s => s === "BIG").length;
+            // 3. Mixed Frequency Engine (बहुमत के आधार पर)
+            let big_count = recent.filter(s => s === "BIG").length;
             let pred = big_count >= 2 ? "BIG" : "SMALL";
-            return { prediction: pred, pattern: "📊 MIXED TREND" };
+            return { prediction: pred, pattern: "📊 MIXED FREQUENCY" };
         }
 
         async function fetchWithRetry(url, retries = 2, timeout = 2500) {
@@ -199,6 +204,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                             result_status = "LOSS 🤬💔";
                         }
 
+                        // Instant Telegram Result (Pure Minimalist Format)
                         if (document.getElementById('tgToggle').checked) {
                             fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
                                 method: 'POST',
@@ -228,6 +234,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                         lockedPattern = result.pattern;
                         records[0].predicted = lockedPrediction;
 
+                        // Main Signal with 5s Delay
                         if (document.getElementById('tgToggle').checked) {
                             let msg = `👑 BSNV VIP SIGNAL 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}`;
                             setTimeout(() => {
