@@ -12,7 +12,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BSNL VIP WinGo 30S Terminal</title>
+    <title>जीवन ट्रांसपोर्ट VIP WinGo 30S Terminal</title>
     <style>
         :root { --bg-color: #070b19; --card-bg: rgba(15, 23, 42, 0.9); --border-glow: rgba(56, 189, 248, 0.4); --text-main: #f8fafc; --accent-gold: #fbbf24; }
         body { background: var(--bg-color); color: var(--text-main); font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding: 15px; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
@@ -35,13 +35,13 @@ HTML_CONTENT = """<!DOCTYPE html>
 </head>
 <body>
     <div class="vip-card">
-        <div class="header-title">BSNL VIP 30S Terminal</div>
+        <div class="header-title">जीवन ट्रांसपोर्ट 30S</div>
         <div class="top-bar">
             <button style="background:#0284c7; color:#fff; border:0; padding:6px 14px; border-radius:8px;">30S</button>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="pattern-box" id="pattern-text">पैटर्न स्कैन हो रहा है...</div>
+        <div class="pattern-box" id="pattern-text">Loss-Flip Logic Active...</div>
         <div class="signal-box" id="signal-text">--</div>
         <div class="stats-row">
             <span style="color: #22c55e;">जीत (Win): <span id="wins-count">0</span></span>
@@ -68,7 +68,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         let urlParams = new URLSearchParams(window.location.search);
         let userName = urlParams.get('user');
         if (!userName || userName.trim() === "") {
-            userName = localStorage.getItem("bsnl_user_name");
+            userName = localStorage.getItem("jivan_user_name");
         }
         if (!userName || userName.trim() === "" || userName === "null") {
             userName = prompt("🔒 सुरक्षा जाँच: कृपया अपना असली नाम दर्ज करें:");
@@ -76,12 +76,13 @@ HTML_CONTENT = """<!DOCTYPE html>
                 userName = "Guest_" + Math.floor(Math.random() * 1000);
             }
         }
-        localStorage.setItem("bsnl_user_name", userName);
+        localStorage.setItem("jivan_user_name", userName);
 
         let lastProcessedIssue = "";
         let historyLog = [];
         let records = [];
         let stats = { wins: 0, losses: 0 };
+        let flipOnLoss = false;
         
         let lockedPeriod = "";
         let lockedPrediction = null;
@@ -129,30 +130,19 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // Advanced 4-Round Deep Pattern Analysis Engine
         function analyzeMarketPattern(history_list) {
-            if (!history_list || history_list.length < 4) {
+            if (!history_list || history_list.length < 2) {
                 return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
             }
-            // पिछले 4 राउंड्स के परिणाम (Index 0 सबसे ताज़ा है)
-            let recent = history_list.slice(0, 4).map(r => r.size);
+            let recent = history_list.map(r => r.size);
+            let base_pred = recent[0];
 
-            // 1. Dragon Pattern (पिछले 4 या कम से कम 3 लगातार एक जैसे)
-            if (recent[0] === recent[1] && recent[1] === recent[2]) {
-                return { prediction: recent[0], pattern: "🐉 DRAGON (" + recent[0] + ")" };
+            if (flipOnLoss) {
+                let flipped_pred = (base_pred === "BIG") ? "SMALL" : "BIG";
+                return { prediction: flipped_pred, pattern: "🔄 LOSS-FLIP (" + flipped_pred + ")" };
+            } else {
+                return { prediction: base_pred, pattern: "⚡ NORMAL TREND (" + base_pred + ")" };
             }
-
-            // 2. Zig-Zag Pattern (बारी-बारी से उलटा चलना)
-            let is_zigzag = (recent[0] !== recent[1] && recent[1] !== recent[2] && recent[2] !== recent[3]);
-            if (is_zigzag) {
-                let next_pred = recent[0] === "BIG" ? "SMALL" : "BIG";
-                return { prediction: next_pred, pattern: "⚡ ZIG-ZAG PATTERN" };
-            }
-
-            // 3. Mixed Frequency Engine (बहुमत के आधार पर)
-            let big_count = recent.filter(s => s === "BIG").length;
-            let pred = big_count >= 2 ? "BIG" : "SMALL";
-            return { prediction: pred, pattern: "📊 MIXED FREQUENCY" };
         }
 
         async function fetchWithRetry(url, retries = 2, timeout = 2500) {
@@ -199,12 +189,13 @@ HTML_CONTENT = """<!DOCTYPE html>
                         if (last_pred === actual_size) {
                             stats.wins++;
                             result_status = "👑  WIN ⚡👑";
+                            flipOnLoss = false;
                         } else {
                             stats.losses++;
                             result_status = "LOSS 🤬💔";
+                            flipOnLoss = true;
                         }
 
-                        // Instant Telegram Result (Pure Minimalist Format)
                         if (document.getElementById('tgToggle').checked) {
                             fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
                                 method: 'POST',
@@ -232,11 +223,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                         lockedPeriod = short_next;
                         lockedPrediction = result.prediction;
                         lockedPattern = result.pattern;
-                        records[0].predicted = lockedPrediction;
+                        if(records.length > 0) records[0].predicted = lockedPrediction;
 
-                        // Main Signal with 5s Delay
                         if (document.getElementById('tgToggle').checked) {
-                            let msg = `👑 BSNV VIP SIGNAL 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}`;
+                            let msg = `👑 जीवन ट्रांसपोर्ट VIP SIGNAL 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}`;
                             setTimeout(() => {
                                 if (document.getElementById('tgToggle').checked) {
                                     fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
@@ -255,7 +245,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     document.getElementById('pattern-text').innerText = lockedPattern;
                 } else {
                     document.getElementById('signal-text').innerText = "WAITING";
-                    document.getElementById('pattern-text').innerText = "पैटर्न स्कैन हो रहा है...";
+                    document.getElementById('pattern-text').innerText = "डेटा सिंक हो रहा है...";
                 }
 
                 document.getElementById('issue-text').innerText = "पीरियड नंबर: " + short_next;
@@ -336,9 +326,9 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             
             html = f"""
             <html>
-            <head><title>Master Admin Control</title></head>
+            <head><title>जीवन ट्रांसपोर्ट Admin Panel</title></head>
             <body style="background:#0f172a; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
-                <h1>👑 BSNV VIP Master Admin Panel 👑</h1>
+                <h1>👑 जीवन ट्रांसपोर्ट VIP Master Admin 👑</h1>
                 <h3>Total Active Devices: {len(active_sessions)}</h3>
                 <table border="1" style="margin:20px auto; width:80%; border-collapse:collapse; text-align:center;">
                     <tr style="background:#1e293b; color:#38bdf8;"><th>User Name</th><th>Client IP</th><th>Status</th><th>Action</th></tr>
