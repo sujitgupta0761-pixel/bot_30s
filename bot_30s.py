@@ -17,19 +17,20 @@ HTML_CONTENT = """<!DOCTYPE html>
         :root { --bg-color: #070b19; --card-bg: rgba(15, 23, 42, 0.9); --border-glow: rgba(56, 189, 248, 0.4); --text-main: #f8fafc; --accent-gold: #fbbf24; }
         body { background: var(--bg-color); color: var(--text-main); font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding: 15px; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
         .vip-card { background: var(--card-bg); border: 2px solid var(--border-glow); border-radius: 22px; padding: 22px; width: 100%; max-width: 420px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9); }
-        .header-title { font-size: 24px; font-weight: 900; color: #38bdf8; margin-bottom: 15px; }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #1e1b4b; padding: 10px 14px; border-radius: 12px; margin-bottom: 14px; }
+        .header-title { font-size: 24px; font-weight: 900; color: #38bdf8; margin-bottom: 12px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #1e1b4b; padding: 10px 14px; border-radius: 12px; margin-bottom: 10px; }
         .tg-control { font-size: 12px; display: flex; align-items: center; gap: 6px; color: #38bdf8; font-weight: bold; }
-        .info-row { display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.8); padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; font-size: 13px; }
+        .info-row { display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.8); padding: 8px 12px; border-radius: 10px; margin-bottom: 8px; font-size: 13px; }
         .timer-badge { background: rgba(251, 191, 36, 0.2); color: var(--accent-gold); padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 14px; font-weight: bold; }
-        .pattern-box { background: #1e1b4b; border: 1px solid #475569; color: #facc15; font-weight: 800; padding: 8px; border-radius: 10px; font-size: 13px; margin-bottom: 10px; }
-        .signal-box { font-size: 48px; font-weight: 900; margin: 10px 0; padding: 14px; border-radius: 14px; background: #000; letter-spacing: 2px; color: #38bdf8; }
-        .table-container { max-height: 160px; overflow-y: auto; border-radius: 8px; border: 1px solid #475569; margin-top: 10px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; color: #fff; }
-        th, td { padding: 8px; border-bottom: 1px solid #1e293b; text-align: center; }
+        .pattern-box { background: #1e1b4b; border: 1px solid #475569; color: #facc15; font-weight: 800; padding: 8px; border-radius: 10px; font-size: 13px; margin-bottom: 8px; }
+        .signal-box { font-size: 42px; font-weight: 900; margin: 8px 0; padding: 12px; border-radius: 14px; background: #000; letter-spacing: 2px; color: #38bdf8; }
+        .stats-row { display: flex; justify-content: space-around; background: #1e293b; padding: 8px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; font-weight: bold; }
+        .table-container { max-height: 150px; overflow-y: auto; border-radius: 8px; border: 1px solid #475569; margin-top: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; color: #fff; }
+        th, td { padding: 6px; border-bottom: 1px solid #1e293b; text-align: center; }
         th { background: #0f172a; color: #38bdf8; position: sticky; top: 0; }
-        .footer-panel { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; font-size: 12px; background: rgba(56, 189, 248, 0.1); padding: 8px 12px; border-radius: 8px; }
-        .admin-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 5px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .footer-panel { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; background: rgba(56, 189, 248, 0.1); padding: 6px 10px; border-radius: 8px; }
+        .admin-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 4px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -42,11 +43,15 @@ HTML_CONTENT = """<!DOCTYPE html>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
         <div class="pattern-box" id="pattern-text">पैटर्न स्कैन हो रहा है...</div>
         <div class="signal-box" id="signal-text">--</div>
+        <div class="stats-row">
+            <span style="color: #22c55e;">जीत (Win): <span id="wins-count">0</span></span>
+            <span style="color: #ef4444;">हार (Loss): <span id="losses-count">0</span></span>
+        </div>
         <h3>लाइव मार्केट इतिहास</h3>
         <div class="table-container">
             <table>
-                <thead><tr><th>पीरियड</th><th>नंबर</th><th>साइज</th></tr></thead>
-                <tbody id="history-rows"><tr><td colspan="3">डाटा सिंक हो रहा है...</td></tr></tbody>
+                <thead><tr><th>पीरियड</th><th>नंबर</th><th>साइज</th><th>स्टेटस</th></tr></thead>
+                <tbody id="history-rows"><tr><td colspan="4">डाटा सिंक हो रहा है...</td></tr></tbody>
             </table>
         </div>
         <div class="footer-panel">
@@ -76,6 +81,8 @@ HTML_CONTENT = """<!DOCTYPE html>
         let lastProcessedIssue = "";
         let historyLog = [];
         let records = [];
+        let stats = { wins: 0, losses: 0 };
+        
         let lockedPeriod = "";
         let lockedPrediction = null;
         let lockedPattern = "";
@@ -128,19 +135,16 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
             let recent = history_list.map(r => r.size);
 
-            // 1. Dragon Pattern (लगातार एक ही साइज: जैसे BIG, BIG, BIG)
             if (recent[0] === recent[1] && recent[1] === recent[2]) {
                 return { prediction: recent[0], pattern: "🐉 DRAGON (" + recent[0] + ")" };
             }
 
-            // 2. Zig-Zag Pattern (उल्टा-पुल्टा: जैसे BIG, SMALL, BIG, SMALL)
             let is_zigzag = (recent[0] !== recent[1] && recent[1] !== recent[2] && recent[2] !== recent[3]);
             if (is_zigzag) {
                 let next_pred = recent[0] === "BIG" ? "SMALL" : "BIG";
                 return { prediction: next_pred, pattern: "⚡ ZIG-ZAG PATTERN" };
             }
 
-            // 3. Mixed Trend (Frequency Check)
             let big_count = recent.slice(0, 4).filter(s => s === "BIG").length;
             let pred = big_count >= 2 ? "BIG" : "SMALL";
             return { prediction: pred, pattern: "📊 MIXED TREND" };
@@ -168,7 +172,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (!list || list.length === 0) return;
 
                 if (lastProcessedIssue === "" && list.length >= 5) {
-                    for (let i = Math.min(10, list.length) - 1; i >= 0; i--) {
+                    for (let i = Math.min(10, list.length) - 1; i >= 1; i--) {
                         let p_item = list[i];
                         let p_num = parseInt(p_item.number !== undefined ? p_item.number : p_item.winningNumber);
                         records.unshift({ size: p_num >= 5 ? "BIG" : "SMALL" });
@@ -183,13 +187,34 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (issueId !== lastProcessedIssue) {
                     lastProcessedIssue = issueId;
                     let actual_size = num >= 5 ? "BIG" : "SMALL";
-                    records.unshift({ size: actual_size });
+                    let result_status = "📌 PAST";
+
+                    if (records.length > 0 && records[0].predicted) {
+                        let last_pred = records[0].predicted;
+                        if (last_pred === actual_size) {
+                            stats.wins++;
+                            result_status = "👑  WIN ⚡👑";
+                        } else {
+                            stats.losses++;
+                            result_status = "LOSS 🤬💔";
+                        }
+
+                        if (document.getElementById('tgToggle').checked) {
+                            fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: result_status, parse_mode: "Markdown" })
+                            }).catch(err => {});
+                        }
+                    }
+
+                    records.unshift({ size: actual_size, predicted: lockedPrediction });
                     if (records.length > 30) records.pop();
 
-                    historyLog.unshift({ issue: issueId.slice(-4), num: num, size: actual_size });
+                    historyLog.unshift({ issue: issueId.slice(-4), num: num, size: actual_size, status: result_status });
                     if (historyLog.length > 20) historyLog.pop();
 
-                    lockedPrediction = null; // नया पीरियड शुरू होते ही लॉक रीसेट
+                    lockedPrediction = null;
                 }
 
                 let next_issue = String(BigInt(issueId) + 1n);
@@ -201,20 +226,25 @@ HTML_CONTENT = """<!DOCTYPE html>
                         lockedPeriod = short_next;
                         lockedPrediction = result.prediction;
                         lockedPattern = result.pattern;
+                        records[0].predicted = lockedPrediction;
 
                         if (document.getElementById('tgToggle').checked) {
                             let msg = `👑 BSNV VIP SIGNAL 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}`;
-                            fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: msg, parse_mode: "Markdown" })
-                            }).catch(err => {});
+                            setTimeout(() => {
+                                if (document.getElementById('tgToggle').checked) {
+                                    fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ chat_id: TG_CHAT_ID, text: msg, parse_mode: "Markdown" })
+                                    }).catch(err => {});
+                                }
+                            }, 5000);
                         }
                     }
                 }
 
                 if (lockedPrediction) {
-                    document.getElementById('signal-text').innerText = lockedPrediction === "BIG" ? "🟢 BIG" : "🔴 SMALL";
+                    document.getElementById('signal-text').innerText = lockedPrediction;
                     document.getElementById('pattern-text').innerText = lockedPattern;
                 } else {
                     document.getElementById('signal-text').innerText = "WAITING";
@@ -222,12 +252,15 @@ HTML_CONTENT = """<!DOCTYPE html>
                 }
 
                 document.getElementById('issue-text').innerText = "पीरियड नंबर: " + short_next;
+                document.getElementById('wins-count').innerText = stats.wins;
+                document.getElementById('losses-count').innerText = stats.losses;
 
                 let rows = "";
                 historyLog.forEach(item => {
-                    rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td></tr>`;
+                    let colorStyle = item.status.includes("WIN") ? "color:#22c55e; font-weight:bold;" : (item.status.includes("LOSS") ? "color:#ef4444; font-weight:bold;" : "color:#94a3b8;");
+                    rows += `<tr><td>${item.issue}</td><td>${item.num}</td><td>${item.size}</td><td style="${colorStyle}">${item.status}</td></tr>`;
                 });
-                document.getElementById('history-rows').innerHTML = rows || '<tr><td colspan="3">डाटा सिंक हो रहा है...</td></tr>';
+                document.getElementById('history-rows').innerHTML = rows || '<tr><td colspan="4">डाटा सिंक हो रहा है...</td></tr>';
 
             } catch (e) {}
         }
