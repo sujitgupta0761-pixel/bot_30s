@@ -1,6 +1,11 @@
 import http.server
 import socketserver
 import os
+import time
+from urllib.parse import parse_qs, urlparse
+
+active_sessions = {}
+blocked_ips = set()
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="hi">
@@ -25,6 +30,8 @@ HTML_CONTENT = """<!DOCTYPE html>
         table { width: 100%; border-collapse: collapse; font-size: 12px; color: #fff; }
         th, td { padding: 8px; border-bottom: 1px solid #1e293b; text-align: center; }
         th { background: #0f172a; color: #38bdf8; position: sticky; top: 0; }
+        .footer-panel { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; background: rgba(56, 189, 248, 0.1); padding: 6px 10px; border-radius: 8px; }
+        .admin-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 4px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -50,12 +57,28 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <tbody id="history-rows"><tr><td colspan="4">डाटा सिंक हो रहा है...</td></tr></tbody>
             </table>
         </div>
+        <div class="footer-panel">
+            <span>🟢 एक्टिव डिवाइस: <span id="active-count">1</span></span>
+            <button class="admin-btn" onclick="openAdminPanel()">⚙️ Admin Panel</button>
+        </div>
     </div>
     <script>
         const TG_BOT_TOKEN = "8615000301:AAGL-UQq6ZKjuaSkDm-fk15xBfz3Xw3BPD0";
         const TG_CHAT_ID = "-1003934563963";
         const API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json";
         const TG_PASSWORD = "8709";
+
+        // Auto Name Prompt if not in URL
+        let urlParams = new URLSearchParams(window.location.search);
+        let userName = urlParams.get('user');
+        if (!userName || userName.trim() === "") {
+            userName = prompt("🔒 सुरक्षा जाँच: कृपया अपना असली नाम दर्ज करें:");
+            if (!userName || userName.trim() === "") {
+                userName = "Guest_" + Math.floor(Math.random() * 1000);
+            }
+            let newUrl = window.location.pathname + "?user=" + encodeURIComponent(userName);
+            window.history.replaceState({}, '', newUrl);
+        }
 
         let lastProcessedIssue = "";
         let consecutiveLosses = 0;
@@ -65,6 +88,25 @@ HTML_CONTENT = """<!DOCTYPE html>
         
         let lockedPeriod = "";
         let lockedPrediction = null;
+
+        setInterval(() => {
+            fetch('/ping?user=' + encodeURIComponent(userName)).then(res => res.json()).then(data => {
+                if(data.blocked) {
+                    document.body.innerHTML = "<h1 style='color:red; margin-top:20vh;'>🚫 Access Denied: Your device has been blocked by the Administrator!</h1>";
+                } else if(data.active_devices) {
+                    document.getElementById('active-count').innerText = data.active_devices;
+                }
+            }).catch(e => {});
+        }, 5000);
+
+        function openAdminPanel() {
+            let pass = prompt("🔑 एडमिन पासवर्ड दर्ज करें:");
+            if (pass === TG_PASSWORD) {
+                window.location.href = "/admin?pass=8709";
+            } else if (pass !== null) {
+                alert("❌ गलत पासवर्ड!");
+            }
+        }
 
         function verifyTelegram(event) {
             let toggleBox = document.getElementById('tgToggle');
@@ -196,15 +238,12 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                     records.unshift({ issueId: issueId, number: num, size: actual_size, predicted_size: "", predNumbers: "" });
                     if (records.length > 50) records.pop();
-                    
-                    // Reset lock for new period
                     lockedPrediction = null;
                 }
 
                 let next_issue = String(BigInt(issueId) + 1n);
                 let short_next = next_issue.slice(-4);
 
-                // Lock prediction per period to prevent number flickering
                 if (lockedPeriod !== short_next) {
                     let pred = calculatePrediction(records);
                     if (pred) {
@@ -261,6 +300,74 @@ HTML_CONTENT = """<!DOCTYPE html>
 
 class DashboardServer(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        query = parse_qs(parsed_path.query)
+        client_ip = self.client_address[0]
+        
+        user_name = query.get('user', ['Guest'])[0]
+
+        if client_ip in blocked_ips:
+            self.send_response(403)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(b'{"blocked": true}')
+            return
+
+        active_sessions[client_ip] = {"time": time.time(), "name": user_name}
+        current_time = time.time()
+        inactive_ips = [ip for ip, data in active_sessions.items() if current_time - data["time"] > 15]
+        for ip in inactive_ips:
+            del active_sessions[ip]
+
+        if path == "/ping":
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            response_data = f'{{"blocked": false, "active_devices": {len(active_sessions)}}}'
+            self.wfile.write(response_data.encode('utf-8'))
+            return
+
+        elif path == "/admin":
+            admin_pass = query.get('pass', [''])[0]
+            if admin_pass != "8709":
+                self.send_response(401)
+                self.end_headers()
+                self.wfile.write(b"<h1>401 Unauthorized: Invalid Admin Password!</h1>")
+                return
+            
+            action = query.get('action', [''])[0]
+            target_ip = query.get('ip', [''])[0]
+            if action == 'block' and target_ip:
+                blocked_ips.add(target_ip)
+                if target_ip in active_sessions:
+                    del active_sessions[target_ip]
+
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            
+            html = f"""
+            <html>
+            <head><title>Master Admin Control</title></head>
+            <body style="background:#0f172a; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
+                <h1>👑 BSNV VIP Master Admin Panel 👑</h1>
+                <h3>Total Active Devices: {len(active_sessions)}</h3>
+                <table border="1" style="margin:20px auto; width:80%; border-collapse:collapse; text-align:center;">
+                    <tr style="background:#1e293b; color:#38bdf8;"><th>User Name</th><th>Client IP</th><th>Status</th><th>Action</th></tr>
+            """
+            for ip, data in list(active_sessions.items()):
+                html += f"<tr><td style='color:#facc15; font-weight:bold;'>{data['name']}</td><td>{ip}</td><td style='color:green;'>Active</td><td><a href='/admin?pass=8709&action=block&ip={ip}' style='color:red; font-weight:bold;'>BLOCK DEVICE</a></td></tr>"
+            
+            html += """
+                </table>
+                <br><a href="/" style="color:#38bdf8; font-size:16px; font-weight:bold;">⬅️ Back to Terminal</a>
+            </body>
+            </html>
+            """
+            self.wfile.write(html.encode('utf-8'))
+            return
+
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
