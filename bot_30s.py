@@ -62,6 +62,9 @@ HTML_CONTENT = """<!DOCTYPE html>
         let stats = { wins: 0, losses: 0, jackpots: 0 };
         let historyLog = [];
         let records = [];
+        
+        let lockedPeriod = "";
+        let lockedPrediction = null;
 
         function verifyTelegram(event) {
             let toggleBox = document.getElementById('tgToggle');
@@ -193,34 +196,43 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                     records.unshift({ issueId: issueId, number: num, size: actual_size, predicted_size: "", predNumbers: "" });
                     if (records.length > 50) records.pop();
+                    
+                    // Reset lock for new period
+                    lockedPrediction = null;
                 }
 
-                let pred = calculatePrediction(records);
                 let next_issue = String(BigInt(issueId) + 1n);
                 let short_next = next_issue.slice(-4);
 
-                if (pred) {
-                    records[0].predicted_size = pred.display;
-                    records[0].predNumbers = pred.numbers;
+                // Lock prediction per period to prevent number flickering
+                if (lockedPeriod !== short_next) {
+                    let pred = calculatePrediction(records);
+                    if (pred) {
+                        lockedPeriod = short_next;
+                        lockedPrediction = pred;
+                        records[0].predicted_size = pred.display;
+                        records[0].predNumbers = pred.numbers;
 
-                    let signal_line = pred.display === "BIG" ? "🟢 Signal: BIG" : "🔴 Signal: SMALL";
-                    let signal_msg = `👑 PREDICTION VIP 👑\\n🏷️ Period: ${short_next}\\n${signal_line}\\n🎯 Target: ${pred.numbers}\\n📊 Plan: Level-${pred.level}`;
-
-                    document.getElementById('signal-text').innerText = pred.display;
-                    document.getElementById('level-main').innerText = "LEVEL-" + pred.level;
-                    document.getElementById('numbers-text').innerText = pred.numbers;
-
-                    if (document.getElementById('tgToggle').checked) {
-                        setTimeout(() => {
-                            if (document.getElementById('tgToggle').checked) {
-                                fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: signal_msg, parse_mode: "Markdown" })
-                                }).catch(err => {});
-                            }
-                        }, 2000);
+                        if (document.getElementById('tgToggle').checked) {
+                            let signal_line = pred.display === "BIG" ? "🟢 Signal: BIG" : "🔴 Signal: SMALL";
+                            let signal_msg = `👑 PREDICTION VIP 👑\\n🏷️ Period: ${short_next}\\n${signal_line}\\n🎯 Target: ${pred.numbers}\\n📊 Plan: Level-${pred.level}`;
+                            setTimeout(() => {
+                                if (document.getElementById('tgToggle').checked) {
+                                    fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ chat_id: TG_CHAT_ID, text: signal_msg, parse_mode: "Markdown" })
+                                    }).catch(err => {});
+                                }
+                            }, 2000);
+                        }
                     }
+                }
+
+                if (lockedPrediction) {
+                    document.getElementById('signal-text').innerText = lockedPrediction.display;
+                    document.getElementById('level-main').innerText = "LEVEL-" + lockedPrediction.level;
+                    document.getElementById('numbers-text').innerText = lockedPrediction.numbers;
                 } else {
                     document.getElementById('signal-text').innerText = "--";
                     document.getElementById('level-main').innerText = "DATA SYNCING...";
