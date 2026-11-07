@@ -31,7 +31,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         th, td { padding: 6px; border-bottom: 1px solid #1e293b; text-align: center; }
         th { background: #0f172a; color: #38bdf8; position: sticky; top: 0; }
         .footer-panel { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; background: rgba(56, 189, 248, 0.1); padding: 6px 10px; border-radius: 8px; }
-        .action-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 5px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; }
+        .action-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 5px 8px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px; }
     </style>
 </head>
 <body>
@@ -42,7 +42,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="pattern-box" id="pattern-text">VIP Engine Active...</div>
+        <div class="pattern-box" id="pattern-text">VIP Editable Engine Active...</div>
         <div class="signal-box" id="signal-text">--</div>
         
         <!-- Mini Level Indicator on Dashboard -->
@@ -63,9 +63,10 @@ HTML_CONTENT = """<!DOCTYPE html>
             </table>
         </div>
         <div class="footer-panel">
-            <span>🟢 एक्टिव डिवाइस: <span id="active-count">1</span></span>
-            <button class="action-btn" onclick="openLevelMenu()">📋 1-8 Level Menu</button>
-            <button class="action-btn" onclick="openAdminPanel()">⚙️ Admin</button>
+            <span>🟢 एक्टिव: <span id="active-count">1</span></span>
+            <button class="action-btn" onclick="openLevelMenu()">📋 Level Chart</button>
+            <button class="action-btn" onclick="editLevelAmounts()">⚙️ Edit Amt</button>
+            <button class="action-btn" onclick="openAdminPanel()">🔑 Admin</button>
         </div>
     </div>
     <script>
@@ -74,8 +75,8 @@ HTML_CONTENT = """<!DOCTYPE html>
         const API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json";
         const TG_PASSWORD = "8709";
 
-        // Martingale 1 to 8 Level Amount Table (Base amount: 10)
-        const levelAmounts = {
+        // Editable Martingale Amounts (1 to 8 Levels)
+        let levelAmounts = {
             1: 10,
             2: 25,
             3: 60,
@@ -129,15 +130,36 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
-        // Level Menu Popup
+        // View Level Chart Menu
         function openLevelMenu() {
             let menuText = "👑 Jivan VIP - 1 से 8 लेवल अमाउंट चार्ट 👑\\n\\n";
             for (let lvl = 1; lvl <= 8; lvl++) {
                 let marker = (lvl === currentLevel) ? " ➔ [वर्तमान लेवल]" : "";
                 menuText += `Level ${lvl} : ₹${levelAmounts[lvl]}${marker}\\n`;
             }
-            menuText += "\\n💡 नोट: जीत (Win) होने पर बोट स्वतः Level 1 पर आ जाएगा और हार (Loss) पर अगले लेवल पर बढ़ेगा।";
+            menuText += "\\n💡 नोट: 'Edit Amt' बटन से आप इन पैसों को बदल सकते हैं।";
             alert(menuText);
+        }
+
+        // Edit Level Amounts Function
+        function editLevelAmounts() {
+            let lvlChoice = prompt("किस लेवल का अमाउंट बदलना चाहते हैं? (1 से 8 दर्ज करें):");
+            if (!lvlChoice) return;
+            let lvlNum = parseInt(lvlChoice);
+            if (isNaN(lvlNum) || lvlNum < 1 || lvlNum > 8) {
+                alert("❌ कृपया 1 से 8 के बीच का सही नंबर चुनें!");
+                return;
+            }
+            let newAmt = prompt(`Level ${lvlNum} के लिए नया अमाउंट दर्ज करें (वर्तमान: ₹${levelAmounts[lvlNum]}):`);
+            if (newAmt !== null && newAmt.trim() !== "") {
+                let amtNum = parseInt(newAmt);
+                if (!isNaN(amtNum) && amtNum > 0) {
+                    levelAmounts[lvlNum] = amtNum;
+                    alert(`✅ सफलतापूर्वक अपडेट हो गया! Level ${lvlNum} का नया अमाउंट: ₹${amtNum}`);
+                } else {
+                    alert("❌ कृपया कोई वैध (Valid) नंबर दर्ज करें!");
+                }
+            }
         }
 
         function verifyTelegram(event) {
