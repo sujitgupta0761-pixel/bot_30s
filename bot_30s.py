@@ -12,7 +12,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>जीवन ट्रांसपोर्ट VIP WinGo 30S Terminal</title>
+    <title>Jivan dashboard VIP 30S</title>
     <style>
         :root { --bg-color: #070b19; --card-bg: rgba(15, 23, 42, 0.9); --border-glow: rgba(56, 189, 248, 0.4); --text-main: #f8fafc; --accent-gold: #fbbf24; }
         body { background: var(--bg-color); color: var(--text-main); font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding: 15px; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
@@ -35,13 +35,13 @@ HTML_CONTENT = """<!DOCTYPE html>
 </head>
 <body>
     <div class="vip-card">
-        <div class="header-title">जीवन ट्रांसपोर्ट 30S</div>
+        <div class="header-title">Jivan dashboard VIP 30S</div>
         <div class="top-bar">
             <button style="background:#0284c7; color:#fff; border:0; padding:6px 14px; border-radius:8px;">30S</button>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="pattern-box" id="pattern-text">2-Round Fast Engine Active...</div>
+        <div class="pattern-box" id="pattern-text">Jivan Terminal Active...</div>
         <div class="signal-box" id="signal-text">--</div>
         <div class="stats-row">
             <span style="color: #22c55e;">जीत (Win): <span id="wins-count">0</span></span>
@@ -130,27 +130,24 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // Strict 2-Round Pattern & Loss-Shift Logic
         function analyzeMarketPattern(history_list) {
             if (!history_list || history_list.length < 2) {
                 return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
             }
             let recent = history_list.slice(0, 2).map(r => r.size);
 
-            if (shiftToCurrent) {
-                let pred = recent[0];
-                return { prediction: pred, pattern: "🎯 LOSS-SHIFT (" + pred + ")" };
-            }
-
-            // 2-Round Zig-Zag Check
             let is_zigzag = (recent[0] !== recent[1]);
             if (is_zigzag) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
-                return { prediction: pred, pattern: "⚡ 2-ROUND ZIG-ZAG FLIP (" + pred + ")" };
-            } else {
-                // 2-Round Dragon / Trend Follow
-                return { prediction: recent[0], pattern: "🐉 2-ROUND TREND (" + recent[0] + ")" };
+                return { prediction: pred, pattern: "⚡ 2-ROUND ZIG-ZAG (" + pred + ")" };
             }
+
+            if (shiftToCurrent) {
+                let pred = recent[0];
+                return { prediction: pred, pattern: "🎯 LOSS-SHIFT TO CURRENT (" + pred + ")" };
+            }
+
+            return { prediction: recent[0], pattern: "🐉 TREND FOLLOW (" + recent[0] + ")" };
         }
 
         async function fetchWithRetry(url, retries = 2, timeout = 2500) {
@@ -194,6 +191,9 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                     if (records.length > 0 && records[0].predicted) {
                         let last_pred = records[0].predicted;
+                        let recent = records.slice(0, 2).map(r => r.size);
+                        let was_zigzag = (recent.length >= 2 && recent[0] !== recent[1]);
+
                         if (last_pred === actual_size) {
                             stats.wins++;
                             result_status = "👑  WIN ⚡👑";
@@ -201,7 +201,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                         } else {
                             stats.losses++;
                             result_status = "LOSS 🤬💔";
-                            shiftToCurrent = true;
+                            if (!was_zigzag) {
+                                shiftToCurrent = true;
+                            } else {
+                                shiftToCurrent = false;
+                            }
                         }
 
                         if (document.getElementById('tgToggle').checked) {
@@ -234,7 +238,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                         if(records.length > 0) records[0].predicted = lockedPrediction;
 
                         if (document.getElementById('tgToggle').checked) {
-                            let msg = `👑 जीवन ट्रांसपोर्ट VIP SIGNAL 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}`;
+                            let msg = `👑 Jivan dashboard VIP 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}`;
                             setTimeout(() => {
                                 if (document.getElementById('tgToggle').checked) {
                                     fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
@@ -334,9 +338,9 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             
             html = f"""
             <html>
-            <head><title>जीवन ट्रांसपोर्ट Admin Panel</title></head>
+            <head><title>Jivan dashboard Admin</title></head>
             <body style="background:#0f172a; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
-                <h1>👑 जीवन ट्रांसपोर्ट VIP Master Admin 👑</h1>
+                <h1>👑 Jivan dashboard VIP Master Admin 👑</h1>
                 <h3>Total Active Devices: {len(active_sessions)}</h3>
                 <table border="1" style="margin:20px auto; width:80%; border-collapse:collapse; text-align:center;">
                     <tr style="background:#1e293b; color:#38bdf8;"><th>User Name</th><th>Client IP</th><th>Status</th><th>Action</th></tr>
