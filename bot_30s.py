@@ -41,7 +41,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="pattern-box" id="pattern-text">Smart Zig-Zag Active...</div>
+        <div class="pattern-box" id="pattern-text">2-Round Fast Engine Active...</div>
         <div class="signal-box" id="signal-text">--</div>
         <div class="stats-row">
             <span style="color: #22c55e;">जीत (Win): <span id="wins-count">0</span></span>
@@ -130,34 +130,27 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // Advanced Smart Zig-Zag & Trend Logic
+        // Strict 2-Round Pattern & Loss-Shift Logic
         function analyzeMarketPattern(history_list) {
-            if (!history_list || history_list.length < 3) {
+            if (!history_list || history_list.length < 2) {
                 return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
             }
-            let recent = history_list.slice(0, 3).map(r => r.size);
+            let recent = history_list.slice(0, 2).map(r => r.size);
 
             if (shiftToCurrent) {
                 let pred = recent[0];
                 return { prediction: pred, pattern: "🎯 LOSS-SHIFT (" + pred + ")" };
             }
 
-            // Check if market is strictly alternating (Zig-Zag: e.g., Big, Small, Big)
-            let is_zigzag = (recent[0] !== recent[1] && recent[1] !== recent[2]);
+            // 2-Round Zig-Zag Check
+            let is_zigzag = (recent[0] !== recent[1]);
             if (is_zigzag) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
-                return { prediction: pred, pattern: "⚡ ZIG-ZAG FLIP (" + pred + ")" };
+                return { prediction: pred, pattern: "⚡ 2-ROUND ZIG-ZAG FLIP (" + pred + ")" };
+            } else {
+                // 2-Round Dragon / Trend Follow
+                return { prediction: recent[0], pattern: "🐉 2-ROUND TREND (" + recent[0] + ")" };
             }
-
-            // Dragon or Streak
-            if (recent[0] === recent[1] && recent[1] === recent[2]) {
-                return { prediction: recent[0], pattern: "🐉 DRAGON (" + recent[0] + ")" };
-            }
-
-            // Default Majority / Trend Follow
-            let big_count = recent.filter(s => s === "BIG").length;
-            let pred = big_count >= 2 ? "BIG" : "SMALL";
-            return { prediction: pred, pattern: "📊 TREND FOLLOW (" + pred + ")" };
         }
 
         async function fetchWithRetry(url, retries = 2, timeout = 2500) {
