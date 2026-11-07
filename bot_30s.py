@@ -41,7 +41,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="pattern-box" id="pattern-text">Jivan Terminal Active...</div>
+        <div class="pattern-box" id="pattern-text">3-Round Zig-Zag Engine Active...</div>
         <div class="signal-box" id="signal-text">--</div>
         <div class="stats-row">
             <span style="color: #22c55e;">जीत (Win): <span id="wins-count">0</span></span>
@@ -130,23 +130,27 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
+        // 3-Round Zig-Zag Check First, then Loss-Shift
         function analyzeMarketPattern(history_list) {
-            if (!history_list || history_list.length < 2) {
+            if (!history_list || history_list.length < 3) {
                 return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
             }
-            let recent = history_list.slice(0, 2).map(r => r.size);
+            let recent = history_list.slice(0, 3).map(r => r.size);
 
-            let is_zigzag = (recent[0] !== recent[1]);
+            // 1. Pehle 3-Round ka Zig-Zag check karega (e.g. Big, Small, Big)
+            let is_zigzag = (recent[0] !== recent[1] && recent[1] !== recent[2]);
             if (is_zigzag) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
-                return { prediction: pred, pattern: "⚡ 2-ROUND ZIG-ZAG (" + pred + ")" };
+                return { prediction: pred, pattern: "⚡ 3-ROUND ZIG-ZAG (" + pred + ")" };
             }
 
+            // 2. Agar zigzag nahi hai, aur loss ke baad shift active hai
             if (shiftToCurrent) {
                 let pred = recent[0];
                 return { prediction: pred, pattern: "🎯 LOSS-SHIFT TO CURRENT (" + pred + ")" };
             }
 
+            // 3. Normal Trend Follow
             return { prediction: recent[0], pattern: "🐉 TREND FOLLOW (" + recent[0] + ")" };
         }
 
@@ -191,8 +195,8 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                     if (records.length > 0 && records[0].predicted) {
                         let last_pred = records[0].predicted;
-                        let recent = records.slice(0, 2).map(r => r.size);
-                        let was_zigzag = (recent.length >= 2 && recent[0] !== recent[1]);
+                        let recent = records.slice(0, 3).map(r => r.size);
+                        let was_zigzag = (recent.length >= 3 && recent[0] !== recent[1] && recent[1] !== recent[2]);
 
                         if (last_pred === actual_size) {
                             stats.wins++;
@@ -340,7 +344,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             <html>
             <head><title>Jivan dashboard Admin</title></head>
             <body style="background:#0f172a; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
-                <h1>👑 Jivan dashboard VIP Master Admin 👑</h1>
+                <h1>👑 PREDICTION VIP 30S Master Admin 👑</h1>
                 <h3>Total Active Devices: {len(active_sessions)}</h3>
                 <table border="1" style="margin:20px auto; width:80%; border-collapse:collapse; text-align:center;">
                     <tr style="background:#1e293b; color:#38bdf8;"><th>User Name</th><th>Client IP</th><th>Status</th><th>Action</th></tr>
