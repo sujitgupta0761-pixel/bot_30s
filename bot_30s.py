@@ -24,13 +24,14 @@ HTML_CONTENT = """<!DOCTYPE html>
         .timer-badge { background: rgba(251, 191, 36, 0.2); color: var(--accent-gold); padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 14px; font-weight: bold; }
         .pattern-box { background: #1e1b4b; border: 1px solid #475569; color: #facc15; font-weight: 800; padding: 8px; border-radius: 10px; font-size: 13px; margin-bottom: 8px; }
         .signal-box { font-size: 42px; font-weight: 900; margin: 8px 0; padding: 12px; border-radius: 14px; background: #000; letter-spacing: 2px; color: #38bdf8; }
+        .level-mini-box { background: rgba(251, 191, 36, 0.15); border: 1px dashed var(--accent-gold); padding: 6px 10px; border-radius: 8px; margin-bottom: 8px; font-size: 12px; font-weight: bold; color: var(--accent-gold); display: flex; justify-content: space-between; align-items: center; }
         .stats-row { display: flex; justify-content: space-around; background: #1e293b; padding: 8px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; font-weight: bold; }
-        .table-container { max-height: 150px; overflow-y: auto; border-radius: 8px; border: 1px solid #475569; margin-top: 8px; }
+        .table-container { max-height: 130px; overflow-y: auto; border-radius: 8px; border: 1px solid #475569; margin-top: 8px; }
         table { width: 100%; border-collapse: collapse; font-size: 11px; color: #fff; }
         th, td { padding: 6px; border-bottom: 1px solid #1e293b; text-align: center; }
         th { background: #0f172a; color: #38bdf8; position: sticky; top: 0; }
         .footer-panel { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; background: rgba(56, 189, 248, 0.1); padding: 6px 10px; border-radius: 8px; }
-        .admin-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 4px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .action-btn { background: #38bdf8; color: #0f172a; border: 0; padding: 5px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; }
     </style>
 </head>
 <body>
@@ -41,8 +42,15 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="tg-control"><span>Telegram Auto:</span> <input type="checkbox" id="tgToggle" onclick="verifyTelegram(event)"></div>
         </div>
         <div class="info-row"><span id="issue-text">पीरियड नंबर: --</span><span>समय: <span class="timer-badge" id="timer-text">00:30</span></span></div>
-        <div class="pattern-box" id="pattern-text">3-Round Zig-Zag Engine Active...</div>
+        <div class="pattern-box" id="pattern-text">VIP Engine Active...</div>
         <div class="signal-box" id="signal-text">--</div>
+        
+        <!-- Mini Level Indicator on Dashboard -->
+        <div class="level-mini-box">
+            <span>📊 वर्तमान लेवल: <span id="current-level-text" style="color:#fff;">Level 1</span></span>
+            <span>💰 लगाने का अमाउंट: <span id="current-amount-text" style="color:#38bdf8; font-size:14px;">₹10</span></span>
+        </div>
+
         <div class="stats-row">
             <span style="color: #22c55e;">जीत (Win): <span id="wins-count">0</span></span>
             <span style="color: #ef4444;">हार (Loss): <span id="losses-count">0</span></span>
@@ -56,7 +64,8 @@ HTML_CONTENT = """<!DOCTYPE html>
         </div>
         <div class="footer-panel">
             <span>🟢 एक्टिव डिवाइस: <span id="active-count">1</span></span>
-            <button class="admin-btn" onclick="openAdminPanel()">⚙️ Admin Panel</button>
+            <button class="action-btn" onclick="openLevelMenu()">📋 1-8 Level Menu</button>
+            <button class="action-btn" onclick="openAdminPanel()">⚙️ Admin</button>
         </div>
     </div>
     <script>
@@ -64,6 +73,19 @@ HTML_CONTENT = """<!DOCTYPE html>
         const TG_CHAT_ID = "-1003934563963";
         const API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json";
         const TG_PASSWORD = "8709";
+
+        // Martingale 1 to 8 Level Amount Table (Base amount: 10)
+        const levelAmounts = {
+            1: 10,
+            2: 25,
+            3: 60,
+            4: 150,
+            5: 350,
+            6: 800,
+            7: 1800,
+            8: 4000
+        };
+        let currentLevel = 1;
 
         let urlParams = new URLSearchParams(window.location.search);
         let userName = urlParams.get('user');
@@ -107,6 +129,17 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
+        // Level Menu Popup
+        function openLevelMenu() {
+            let menuText = "👑 Jivan VIP - 1 से 8 लेवल अमाउंट चार्ट 👑\\n\\n";
+            for (let lvl = 1; lvl <= 8; lvl++) {
+                let marker = (lvl === currentLevel) ? " ➔ [वर्तमान लेवल]" : "";
+                menuText += `Level ${lvl} : ₹${levelAmounts[lvl]}${marker}\\n`;
+            }
+            menuText += "\\n💡 नोट: जीत (Win) होने पर बोट स्वतः Level 1 पर आ जाएगा और हार (Loss) पर अगले लेवल पर बढ़ेगा।";
+            alert(menuText);
+        }
+
         function verifyTelegram(event) {
             let toggleBox = document.getElementById('tgToggle');
             if (toggleBox.checked) {
@@ -130,27 +163,29 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // 3-Round Zig-Zag Check First, then Loss-Shift
         function analyzeMarketPattern(history_list) {
             if (!history_list || history_list.length < 3) {
                 return { prediction: "WAITING", pattern: "डेटा सिंक हो रहा है..." };
             }
             let recent = history_list.slice(0, 3).map(r => r.size);
 
-            // 1. Pehle 3-Round ka Zig-Zag check karega (e.g. Big, Small, Big)
             let is_zigzag = (recent[0] !== recent[1] && recent[1] !== recent[2]);
             if (is_zigzag) {
                 let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
                 return { prediction: pred, pattern: "⚡ 3-ROUND ZIG-ZAG (" + pred + ")" };
             }
 
-            // 2. Agar zigzag nahi hai, aur loss ke baad shift active hai
+            let is_2_1 = (recent[0] === recent[1] && recent[1] !== recent[2]);
+            if (is_2_1) {
+                let pred = (recent[0] === "BIG") ? "SMALL" : "BIG";
+                return { prediction: pred, pattern: "🔄 2/1 PATTERN FLIP (" + pred + ")" };
+            }
+
             if (shiftToCurrent) {
                 let pred = recent[0];
                 return { prediction: pred, pattern: "🎯 LOSS-SHIFT TO CURRENT (" + pred + ")" };
             }
 
-            // 3. Normal Trend Follow
             return { prediction: recent[0], pattern: "🐉 TREND FOLLOW (" + recent[0] + ")" };
         }
 
@@ -197,19 +232,22 @@ HTML_CONTENT = """<!DOCTYPE html>
                         let last_pred = records[0].predicted;
                         let recent = records.slice(0, 3).map(r => r.size);
                         let was_zigzag = (recent.length >= 3 && recent[0] !== recent[1] && recent[1] !== recent[2]);
+                        let was_2_1 = (recent.length >= 3 && recent[0] === recent[1] && recent[1] !== recent[2]);
 
                         if (last_pred === actual_size) {
                             stats.wins++;
                             result_status = "👑  WIN ⚡👑";
                             shiftToCurrent = false;
+                            currentLevel = 1; // Win par level reset to 1
                         } else {
                             stats.losses++;
                             result_status = "LOSS 🤬💔";
-                            if (!was_zigzag) {
+                            if (!was_zigzag && !was_2_1) {
                                 shiftToCurrent = true;
                             } else {
                                 shiftToCurrent = false;
                             }
+                            if (currentLevel < 8) currentLevel++; // Loss par agla level
                         }
 
                         if (document.getElementById('tgToggle').checked) {
@@ -242,7 +280,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                         if(records.length > 0) records[0].predicted = lockedPrediction;
 
                         if (document.getElementById('tgToggle').checked) {
-                            let msg = `👑 Jivan dashboard VIP 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}`;
+                            let msg = `👑 Jivan dashboard VIP 👑\\n🏷️ Period: ${short_next}\\n🎯 Prediction: ${lockedPrediction}\\n📈 Pattern: ${lockedPattern}\\n💰 Level ${currentLevel} Amount: ₹${levelAmounts[currentLevel]}`;
                             setTimeout(() => {
                                 if (document.getElementById('tgToggle').checked) {
                                     fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
@@ -267,6 +305,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 document.getElementById('issue-text').innerText = "पीरियड नंबर: " + short_next;
                 document.getElementById('wins-count').innerText = stats.wins;
                 document.getElementById('losses-count').innerText = stats.losses;
+                
+                // Update Mini Level Display
+                document.getElementById('current-level-text').innerText = `Level ${currentLevel}`;
+                document.getElementById('current-amount-text').innerText = `₹${levelAmounts[currentLevel]}`;
 
                 let rows = "";
                 historyLog.forEach(item => {
@@ -344,7 +386,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             <html>
             <head><title>Jivan dashboard Admin</title></head>
             <body style="background:#0f172a; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
-                <h1>👑 PREDICTION VIP 30S Master Admin 👑</h1>
+                <h1>👑 Jivan dashboard VIP Master Admin 👑</h1>
                 <h3>Total Active Devices: {len(active_sessions)}</h3>
                 <table border="1" style="margin:20px auto; width:80%; border-collapse:collapse; text-align:center;">
                     <tr style="background:#1e293b; color:#38bdf8;"><th>User Name</th><th>Client IP</th><th>Status</th><th>Action</th></tr>
