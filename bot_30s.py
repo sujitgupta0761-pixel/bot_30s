@@ -24,8 +24,8 @@ def load_passwords():
     except Exception as e:
         print("Firebase Load Error:", e)
     return {
-        "vip123": {"status": "Active", "bound_ip": "", "expires_at": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")},
-        "jivan99": {"status": "Active", "bound_ip": "", "expires_at": (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")}
+        "vip123": {"status": "Active", "session_token": "", "expires_at": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")},
+        "jivan99": {"status": "Active", "session_token": "", "expires_at": (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")}
     }
 
 def save_passwords(db):
@@ -39,12 +39,11 @@ def save_passwords(db):
 
 user_passwords_db = load_passwords()
 
-# Migrate old formats if any
 for p in list(user_passwords_db.keys()):
     if isinstance(user_passwords_db[p], str):
         user_passwords_db[p] = {
             "status": user_passwords_db[p], 
-            "bound_ip": "", 
+            "session_token": "", 
             "expires_at": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
         }
 
@@ -76,7 +75,7 @@ HTML_LOGIN = """<!DOCTYPE html>
     <div class="login-card">
         <div class="logo-icon">👑</div>
         <h2>Jivan Master VIP</h2>
-        <p>डैशबोर्ड एक्सेस करने के लिए अपना लॉगिन पासवर्ड दर्ज करें। (वैधता समय सीमा के साथ)</p>
+        <p>डैशबोर्ड एक्सेस करने के लिए अपना लॉगिन पासवर्ड दर्ज करें। (हर बार लॉगिन आवश्यक है)</p>
         <form method="POST">
             <input type="password" name="password" placeholder="••••••••" required autofocus>
             <button type="submit">अनलॉक करें ➔</button>
@@ -107,8 +106,8 @@ HTML_BLOCKED_HINDI = """<!DOCTYPE html>
 <body>
     <div class="block-card">
         <div class="icon">⌛</div>
-        <h1>आपका पासवर्ड एक्सपायर या ब्लॉक हो गया है!</h1>
-        <p>पासवर्ड का समय समाप्त हो गया है या ब्लॉक कर दिया गया है। नया पासवर्ड बनवाने के लिए नीचे दी गई आईडी पर क्लिक करके टेलीग्राम पर संपर्क करें:</p>
+        <h1>आपका पासवर्ड ब्लॉक या अन्य डिवाइस पर लॉगिन हो गया है!</h1>
+        <p>यह पासवर्ड या तो एक्सपायर हो गया है, ब्लॉक है, या किसी अन्य मोबाइल पर उपयोग किया जा रहा है। नया पासवर्ड बनवाने के लिए संपर्क करें:</p>
         <div class="copy-box" onclick="copyId(this)" title="Click to copy">
             <a href="https://t.me/VIPGUPTAA" target="_blank">@VIPGUPTAA</a>
         </div>
@@ -517,7 +516,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             target_ip = query.get('ip', [''])[0]
             target_upass = query.get('upass', [''])[0]
             new_upass = query.get('new_upass', [''])[0]
-            duration_type = query.get('duration', ['7'])[0] # 7 days (Weekly) or 30 days (Monthly)
+            duration_type = query.get('duration', ['30'])[0]
 
             if action == 'block' and target_ip: blocked_ips.add(target_ip)
             elif action == 'unblock' and target_ip: blocked_ips.discard(target_ip)
@@ -530,7 +529,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                 exp_date = datetime.now() + timedelta(days=days)
                 user_passwords_db[new_upass.strip()] = {
                     "status": "Active", 
-                    "bound_ip": "", 
+                    "session_token": "", 
                     "expires_at": exp_date.strftime("%Y-%m-%d %H:%M:%S")
                 }
                 save_passwords(user_passwords_db)
@@ -541,7 +540,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             elif action == 'unblock_user' and target_upass:
                 if target_upass in user_passwords_db: 
                     user_passwords_db[target_upass]["status"] = "Active"
-                    user_passwords_db[target_upass]["bound_ip"] = ""
+                    user_passwords_db[target_upass]["session_token"] = ""
                     save_passwords(user_passwords_db)
             elif action == 'extend_user' and target_upass:
                 days = int(duration_type)
@@ -591,14 +590,14 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
 
                 <h3>Registered User Passwords & Validity (Single Device Locked)</h3>
                 <table border="1" style="margin:10px auto; width:95%; max-width:850px; border-collapse:collapse; text-align:center;">
-                    <tr style="background:#1e293b; color:#38bdf8;"><th>Password</th><th>Status</th><th>Validity Expiry</th><th>Bound IP</th><th>Actions</th></tr>
+                    <tr style="background:#1e293b; color:#38bdf8;"><th>Password</th><th>Status</th><th>Validity Expiry</th><th>Session Active</th><th>Actions</th></tr>
             """
             for upass, udata in user_passwords_db.items():
                 ustat = udata.get("status", "Active")
-                b_ip = udata.get("bound_ip", "") or "Not Bound"
+                session_tok = udata.get("session_token", "")
+                has_session = "Yes (Locked)" if session_tok else "No"
                 exp_str = udata.get("expires_at", "N/A")
                 
-                # Check if expired automatically
                 try:
                     exp_dt = datetime.strptime(exp_str, "%Y-%m-%d %H:%M:%S")
                     if datetime.now() > exp_dt and ustat == "Active":
@@ -612,7 +611,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                 ext = f"<a href='/admin_master_jivan?action=extend_user&upass={upass}&duration=30' style='color:#38bdf8; font-weight:bold;'>+30D</a>"
                 del_btn = f"<a href='/admin_master_jivan?action=delete_user&upass={upass}' style='color:#fbbf24; font-weight:bold;'>DEL</a>"
                 
-                html += f"<tr><td><b>{upass}</b></td><td>{stat_html}</td><td style='font-size:11px; color:#facc15;'>{exp_str}</td><td style='font-family:monospace; font-size:10px;'>{b_ip}</td><td>{act} | {ext} | {del_btn}</td></tr>"
+                html += f"<tr><td><b>{upass}</b></td><td>{stat_html}</td><td style='font-size:11px; color:#facc15;'>{exp_str}</td><td style='font-size:11px; color:#38bdf8;'>{has_session}</td><td>{act} | {ext} | {del_btn}</td></tr>"
             
             html += """
                 </table>
@@ -623,13 +622,50 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(html.encode('utf-8'))
             return
 
+        # Check Auth Cookie for Main Dashboard (Session-Based: No Max-Age, asks every time browser restarts)
         if security_config["password_enabled"]:
             cookie_header = self.headers.get('Cookie', '')
-            if "auth_token=" not in cookie_header:
+            auth_cookie = ""
+            for cookie in cookie_header.split(';'):
+                if 'auth_token=' in cookie:
+                    auth_cookie = cookie.split('auth_token=')[1].strip()
+            
+            if not auth_cookie or not auth_cookie.startswith("jivan_vip_"):
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html; charset=utf-8')
                 self.end_headers()
                 self.wfile.write(HTML_LOGIN.replace('%ERROR_MSG%', '').encode('utf-8'))
+                return
+            
+            pass_key = auth_cookie.replace("jivan_vip_", "")
+            if pass_key not in user_passwords_db:
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(HTML_LOGIN.replace('%ERROR_MSG%', '').encode('utf-8'))
+                return
+            
+            user_data = user_passwords_db[pass_key]
+            
+            exp_str = user_data.get("expires_at", "")
+            is_expired = False
+            if exp_str:
+                try:
+                    if datetime.now() > datetime.strptime(exp_str, "%Y-%m-%d %H:%M:%S"):
+                        is_expired = True
+                except:
+                    pass
+
+            current_token_in_cookie = ""
+            for c in cookie_header.split(';'):
+                if 'device_session=' in c:
+                    current_token_in_cookie = c.split('device_session=')[1].strip()
+
+            if user_data.get("status") != "Active" or is_expired or (user_data.get("session_token") != current_token_in_cookie):
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(HTML_BLOCKED_HINDI.encode('utf-8'))
                 return
 
         active_sessions[client_ip] = time.time()
@@ -659,7 +695,8 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
 
         if self.path.startswith("/admin_master_jivan") and entered_pass == security_config["dashboard_password"]:
             self.send_response(303)
-            self.send_header('Set-Cookie', 'admin_auth=master_verified; Path=/; Max-Age=3600')
+            # Admin session cookie without Max-Age so it prompts or stays secure for current session
+            self.send_header('Set-Cookie', 'admin_auth=master_verified; Path=/')
             self.send_header('Location', '/admin_master_jivan')
             self.end_headers()
             return
@@ -667,7 +704,6 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
         if entered_pass in user_passwords_db:
             user_data = user_passwords_db[entered_pass]
             
-            # Check Expiry Date
             exp_str = user_data.get("expires_at", "")
             if exp_str:
                 try:
@@ -688,29 +724,22 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(HTML_BLOCKED_HINDI.encode('utf-8'))
                 return
 
-            bound_ip = user_data.get("bound_ip", "")
-
-            if bound_ip and bound_ip != client_ip:
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html; charset=utf-8')
-                self.end_headers()
-                err_html = HTML_LOGIN.replace('%ERROR_MSG%', '<div class="error-box">🚫 यह पासवर्ड पहले से ही किसी अन्य डिवाइस पर एक्टिव है! एक पासवर्ड केवल एक मोबाइल पर चल सकता है।</div>')
-                self.wfile.write(err_html.encode('utf-8'))
-                return
-
-            if not bound_ip:
-                user_data["bound_ip"] = client_ip
-                save_passwords(user_passwords_db)
+            import uuid
+            new_device_token = str(uuid.uuid4())
+            user_data["session_token"] = new_device_token
+            save_passwords(user_passwords_db)
 
             self.send_response(303)
-            self.send_header('Set-Cookie', f'auth_token=jivan_vip_{entered_pass}; Path=/; Max-Age=31536000')
+            # Session-only Cookies (No Max-Age), meaning when browser closes, login expires and requires password again!
+            self.send_header('Set-Cookie', f'auth_token=jivan_vip_{entered_pass}; Path=/')
+            self.send_header('Set-Cookie', f'device_session={new_device_token}; Path=/')
             self.send_header('Location', '/')
             self.end_headers()
             return
 
         if entered_pass == security_config["dashboard_password"]:
             self.send_response(303)
-            self.send_header('Set-Cookie', 'auth_token=jivan_master_auth; Path=/; Max-Age=31536000')
+            self.send_header('Set-Cookie', 'auth_token=jivan_master_auth; Path=/')
             self.send_header('Location', '/')
             self.end_headers()
         else:
