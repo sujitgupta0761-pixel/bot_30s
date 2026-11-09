@@ -96,7 +96,6 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
         .pattern-box { background: #1e1b4b; border: 1px solid #475569; color: #facc15; font-weight: 800; padding: 6px; border-radius: 8px; font-size: 11px; margin-bottom: 5px; }
         .signal-box { font-size: 32px; font-weight: 900; margin: 5px 0; padding: 8px; border-radius: 12px; background: #000; letter-spacing: 2px; color: #38bdf8; }
         
-        /* Advanced Stats Grid */
         .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-bottom: 6px; font-size: 11px; }
         .stat-card { background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; padding: 5px; border-radius: 8px; text-align: left; }
         .stat-card b { color: #38bdf8; }
@@ -128,7 +127,6 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
         <div class="pattern-box" id="pattern-text">Advanced Intelligence Initializing...</div>
         <div class="signal-box" id="signal-text">--</div>
         
-        <!-- Advanced Statistical Analysis Panel -->
         <div class="stats-grid">
             <div class="stat-card">📊 Freq: <span id="freq-stat">Big: 0% | Small: 0%</span></div>
             <div class="stat-card">🔥 Streak: <span id="streak-stat">None</span></div>
@@ -270,7 +268,6 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             document.getElementById('timer-text').innerText = `${m}:${s}`;
         }, 200);
 
-        // --- ADVANCED STATISTICAL & PATTERN ENGINE ---
         function runAdvancedAnalysis(history_list) {
             if (!history_list || history_list.length < 5) {
                 return { prediction: "WAITING", pattern: "डाटा कलेक्ट हो रहा है...", freq: "Big: 0% | Small: 0%", streak: "None", markov: "Analyzing", entropy: "0.00" };
@@ -283,7 +280,6 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             let bigPct = ((bigCount / total) * 100).toFixed(1);
             let smallPct = ((smallCount / total) * 100).toFixed(1);
 
-            // 1. Streak Detection
             let streakCount = 1;
             let streakVal = sizes[0];
             for (let i = 0; i < sizes.length - 1; i++) {
@@ -291,11 +287,10 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
                 else break;
             }
 
-            // 2. Transition Matrix & Markov Chain Analysis
             let transitions = { "BIG": { "BIG": 0, "SMALL": 0 }, "SMALL": { "BIG": 0, "SMALL": 0 } };
             for (let i = 0; i < sizes.length - 1; i++) {
-                let curr = sizes[i+1]; // older
-                let next = sizes[i];   // newer
+                let curr = sizes[i+1];
+                let next = sizes[i];
                 if (transitions[curr] && transitions[curr][next] !== undefined) {
                     transitions[curr][next]++;
                 }
@@ -305,19 +300,16 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
             let tSmall = transitions[lastState]["SMALL"];
             let markovPred = (tBig >= tSmall) ? "BIG" : "SMALL";
 
-            // 3. Bayesian Statistical Probability
             let priorBig = bigCount / total;
             let bayesScoreBig = priorBig * (tBig + 1) / (tBig + tSmall + 2);
             let bayesPred = bayesScoreBig >= 0.5 ? "BIG" : "SMALL";
 
-            // 4. Entropy Analysis (Randomness & Predictability)
             let pB = bigCount / total;
             let pS = smallCount / total;
             let entropy = 0;
             if (pB > 0) entropy -= pB * Math.log2(pB);
             if (pS > 0) entropy -= pS * Math.log2(pS);
 
-            // 5. Pattern Classification (Repeat, Mixed, Zig-Zag, Break Detection)
             let recent = sizes.slice(0, 4);
             let patternName = "";
             let finalPred = bayesPred;
@@ -409,7 +401,6 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
                         lockedPattern = analysis.pattern;
                         if(records.length > 0) records[0].predicted = lockedPrediction;
                         
-                        // Update UI Metrics
                         document.getElementById('freq-stat').innerText = analysis.freq;
                         document.getElementById('streak-stat').innerText = analysis.streak;
                         document.getElementById('markov-stat').innerText = analysis.markov;
@@ -452,12 +443,12 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(b'{"blocked": true}')
+                self.wfile.write('{"blocked": true}'.encode('utf-8'))
                 return
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
-            self.wfile.write(b'<h1 style="color:red; text-align:center; padding-top:20vh;">🚫 Blocked! Contact @VIPGUPTAA</h1>')
+            self.wfile.write('<h1 style="color:red; text-align:center; padding-top:20vh;">🚫 Blocked! Contact @VIPGUPTAA</h1>'.encode('utf-8'))
             return
 
         if path == "/admin_master_jivan":
@@ -529,7 +520,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.end_headers()
-            self.wfile.write(b'{"blocked": false}')
+            self.wfile.write('{"blocked": false}'.encode('utf-8'))
             return
 
         self.send_response(200)
@@ -560,7 +551,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
-            self.wfile.write(b'<h1 style="color:red; text-align:center; padding-top:20vh;">🚫 Password Blocked! Contact @VIPGUPTAA</h1>')
+            self.wfile.write('<h1 style="color:red; text-align:center; padding-top:20vh;">🚫 Password Blocked! Contact @VIPGUPTAA</h1>'.encode('utf-8'))
             return
 
         if entered_pass == security_config["dashboard_password"] or (entered_pass in user_passwords_db and user_passwords_db[entered_pass] == "Active"):
