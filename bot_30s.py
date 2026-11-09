@@ -5,6 +5,7 @@ import time
 import json
 import math
 import urllib.request
+from datetime import datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 active_sessions = {}
@@ -22,7 +23,10 @@ def load_passwords():
                 return data
     except Exception as e:
         print("Firebase Load Error:", e)
-    return {"vip123": "Active", "jivan99": "Active"}
+    return {
+        "vip123": {"status": "Active", "bound_ip": "", "expires_at": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")},
+        "jivan99": {"status": "Active", "bound_ip": "", "expires_at": (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")}
+    }
 
 def save_passwords(db):
     try:
@@ -34,6 +38,15 @@ def save_passwords(db):
         print("Firebase Save Error:", e)
 
 user_passwords_db = load_passwords()
+
+# Migrate old formats if any
+for p in list(user_passwords_db.keys()):
+    if isinstance(user_passwords_db[p], str):
+        user_passwords_db[p] = {
+            "status": user_passwords_db[p], 
+            "bound_ip": "", 
+            "expires_at": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 security_config = {
     "password_enabled": True,
@@ -63,13 +76,52 @@ HTML_LOGIN = """<!DOCTYPE html>
     <div class="login-card">
         <div class="logo-icon">👑</div>
         <h2>Jivan Master VIP</h2>
-        <p>डैशबोर्ड एक्सेस करने के लिए अपना लॉगिन पासवर्ड दर्ज करें।</p>
+        <p>डैशबोर्ड एक्सेस करने के लिए अपना लॉगिन पासवर्ड दर्ज करें। (वैधता समय सीमा के साथ)</p>
         <form method="POST">
             <input type="password" name="password" placeholder="••••••••" required autofocus>
             <button type="submit">अनलॉक करें ➔</button>
         </form>
         %ERROR_MSG%
     </div>
+</body>
+</html>"""
+
+HTML_BLOCKED_HINDI = """<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Blocked / Expired</title>
+    <style>
+        body { background: #040814; color: #f8fafc; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; }
+        .block-card { background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9)); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 24px; padding: 35px 25px; width: 100%; max-width: 400px; box-shadow: 0 25px 50px rgba(0,0,0,0.9); }
+        .icon { font-size: 50px; margin-bottom: 15px; }
+        h1 { color: #ef4444; font-size: 20px; margin-bottom: 10px; font-weight: bold; }
+        p { font-size: 13px; color: #94a3b8; line-height: 1.5; margin-bottom: 20px; }
+        .copy-box { background: #0b1329; border: 1px dashed #38bdf8; padding: 12px; border-radius: 12px; font-size: 18px; color: #38bdf8; font-weight: bold; margin-bottom: 15px; user-select: all; }
+        .copy-box a { color: #38bdf8; text-decoration: none; display: block; }
+        .btn { display: inline-block; width: 100%; box-sizing: border-box; padding: 12px 20px; background: linear-gradient(135deg, #0284c7, #38bdf8); color: #040814; font-weight: bold; text-decoration: none; border-radius: 12px; transition: 0.3s; box-shadow: 0 5px 20px rgba(56,189,248,0.4); }
+        .btn:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="block-card">
+        <div class="icon">⌛</div>
+        <h1>आपका पासवर्ड एक्सपायर या ब्लॉक हो गया है!</h1>
+        <p>पासवर्ड का समय समाप्त हो गया है या ब्लॉक कर दिया गया है। नया पासवर्ड बनवाने के लिए नीचे दी गई आईडी पर क्लिक करके टेलीग्राम पर संपर्क करें:</p>
+        <div class="copy-box" onclick="copyId(this)" title="Click to copy">
+            <a href="https://t.me/VIPGUPTAA" target="_blank">@VIPGUPTAA</a>
+        </div>
+        <a href="https://t.me/VIPGUPTAA" target="_blank" class="btn">टेलीग्राम पर चैट खोलें ➔</a>
+    </div>
+    <script>
+        function copyId(el) {
+            let text = "@VIPGUPTAA";
+            navigator.clipboard.writeText(text).then(() => {
+                alert("टेलीग्राम आईडी कॉपी हो गई है: " + text);
+            });
+        }
+    </script>
 </body>
 </html>"""
 
@@ -221,7 +273,7 @@ HTML_MASTER_CONTENT = """<!DOCTYPE html>
         setInterval(() => {
             fetch('/ping').then(res => res.json()).then(data => {
                 if(data.blocked) {
-                    document.body.innerHTML = "<div style='background:#040814; color:#ff4444; text-align:center; padding-top:20vh;'><h1>🚫 आपका डिवाइस ब्लॉक कर दिया गया है!</h1><a href='https://t.me/VIPGUPTAA' target='_blank' style='color:#38bdf8; font-size:22px;'>@VIPGUPTAA</a></div>";
+                    window.location.reload();
                 } else if(data.active_devices) {
                     document.getElementById('active-count').innerText = data.active_devices;
                 }
@@ -436,7 +488,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         path = parsed_path.path
         query = parse_qs(parsed_path.query)
-        client_ip = self.client_address[0]
+        client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
         
         if client_ip in blocked_ips:
             if path == "/ping":
@@ -448,7 +500,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
-            self.wfile.write('<h1 style="color:red; text-align:center; padding-top:20vh;">🚫 Blocked! Contact @VIPGUPTAA</h1>'.encode('utf-8'))
+            self.wfile.write(HTML_BLOCKED_HINDI.encode('utf-8'))
             return
 
         if path == "/admin_master_jivan":
@@ -465,6 +517,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             target_ip = query.get('ip', [''])[0]
             target_upass = query.get('upass', [''])[0]
             new_upass = query.get('new_upass', [''])[0]
+            duration_type = query.get('duration', ['7'])[0] # 7 days (Weekly) or 30 days (Monthly)
 
             if action == 'block' and target_ip: blocked_ips.add(target_ip)
             elif action == 'unblock' and target_ip: blocked_ips.discard(target_ip)
@@ -473,14 +526,40 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                 new_p = query.get('new_p', [''])[0]
                 if new_p: security_config["dashboard_password"] = new_p
             elif action == 'add_user' and new_upass:
-                user_passwords_db[new_upass.strip()] = "Active"
+                days = int(duration_type)
+                exp_date = datetime.now() + timedelta(days=days)
+                user_passwords_db[new_upass.strip()] = {
+                    "status": "Active", 
+                    "bound_ip": "", 
+                    "expires_at": exp_date.strftime("%Y-%m-%d %H:%M:%S")
+                }
                 save_passwords(user_passwords_db)
             elif action == 'block_user' and target_upass:
-                if target_upass in user_passwords_db: user_passwords_db[target_upass] = "Blocked"; save_passwords(user_passwords_db)
+                if target_upass in user_passwords_db: 
+                    user_passwords_db[target_upass]["status"] = "Blocked"
+                    save_passwords(user_passwords_db)
             elif action == 'unblock_user' and target_upass:
-                if target_upass in user_passwords_db: user_passwords_db[target_upass] = "Active"; save_passwords(user_passwords_db)
+                if target_upass in user_passwords_db: 
+                    user_passwords_db[target_upass]["status"] = "Active"
+                    user_passwords_db[target_upass]["bound_ip"] = ""
+                    save_passwords(user_passwords_db)
+            elif action == 'extend_user' and target_upass:
+                days = int(duration_type)
+                if target_upass in user_passwords_db:
+                    try:
+                        current_exp = datetime.strptime(user_passwords_db[target_upass].get("expires_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S")), "%Y-%m-%d %H:%M:%S")
+                        if current_exp < datetime.now():
+                            current_exp = datetime.now()
+                        new_exp = current_exp + timedelta(days=days)
+                        user_passwords_db[target_upass]["expires_at"] = new_exp.strftime("%Y-%m-%d %H:%M:%S")
+                        user_passwords_db[target_upass]["status"] = "Active"
+                        save_passwords(user_passwords_db)
+                    except Exception as e:
+                        print("Extend Error:", e)
             elif action == 'delete_user' and target_upass:
-                if target_upass in user_passwords_db: del user_passwords_db[target_upass]; save_passwords(user_passwords_db)
+                if target_upass in user_passwords_db: 
+                    del user_passwords_db[target_upass]
+                    save_passwords(user_passwords_db)
 
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
@@ -491,24 +570,62 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             <head><title>Jivan Master Admin Panel</title></head>
             <body style="background:#0f172a; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
                 <h1>👑 Advanced Jivan Master Admin Panel 👑</h1>
-                <div style="background:#1e293b; padding:15px; border-radius:10px; margin:15px auto; width:80%; max-width:600px; border:1px solid #38bdf8;">
+                <div style="background:#1e293b; padding:15px; border-radius:10px; margin:15px auto; width:80%; max-width:650px; border:1px solid #38bdf8;">
                     <h3 style="color:#fbbf24;">Master Password: {security_config["dashboard_password"]}</h3>
                     <a href="/admin_master_jivan?action=toggle_sec" style="background:#38bdf8; color:#0f172a; padding:6px 12px; text-decoration:none; border-radius:6px; font-weight:bold;">Security Toggle</a>
                 </div>
-                <table border="1" style="margin:10px auto; width:80%; max-width:600px; border-collapse:collapse; text-align:center;">
-                    <tr style="background:#1e293b; color:#38bdf8;"><th>User Password</th><th>Status</th><th>Actions</th></tr>
+
+                <div style="background:#1e293b; padding:15px; border-radius:10px; margin:15px auto; width:80%; max-width:650px; border:1px solid #22c55e;">
+                    <h3 style="color:#22c55e; margin-top:0;">👥 Add Time-Based User Password (Hafte/Mahine)</h3>
+                    <form action="/admin_master_jivan" method="GET">
+                        <input type="hidden" name="action" value="add_user">
+                        <input type="text" name="new_upass" placeholder="नया यूजर पासवर्ड" style="padding:8px; border-radius:6px; width:45%;" required>
+                        <select name="duration" style="padding:8px; border-radius:6px; background:#0b1329; color:#fff;">
+                            <option value="7">📅 7 दिन (Weekly)</option>
+                            <option value="30" selected>📅 30 दिन (Monthly)</option>
+                            <option value="1">⏱️ 1 दिन (Demo)</option>
+                        </select>
+                        <button type="submit" style="background:#22c55e; color:#fff; border:0; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">पासवर्ड जोड़ें</button>
+                    </form>
+                </div>
+
+                <h3>Registered User Passwords & Validity (Single Device Locked)</h3>
+                <table border="1" style="margin:10px auto; width:95%; max-width:850px; border-collapse:collapse; text-align:center;">
+                    <tr style="background:#1e293b; color:#38bdf8;"><th>Password</th><th>Status</th><th>Validity Expiry</th><th>Bound IP</th><th>Actions</th></tr>
             """
-            for upass, ustat in user_passwords_db.items():
-                stat = "<span style='color:green;'>Active</span>" if ustat == "Active" else "<span style='color:red;'>Blocked</span>"
-                act = f"<a href='/admin_master_jivan?action=block_user&upass={upass}' style='color:red;'>BLOCK</a>" if ustat == "Active" else f"<a href='/admin_master_jivan?action=unblock_user&upass={upass}' style='color:green;'>UNBLOCK</a>"
-                html += f"<tr><td><b>{upass}</b></td><td>{stat}</td><td>{act} | <a href='/admin_master_jivan?action=delete_user&upass={upass}' style='color:#fbbf24;'>DEL</a></td></tr>"
-            html += "</table><br><a href='/' style='color:#38bdf8; font-weight:bold;'>⬅️ Back to Dashboard</a></body></html>"
+            for upass, udata in user_passwords_db.items():
+                ustat = udata.get("status", "Active")
+                b_ip = udata.get("bound_ip", "") or "Not Bound"
+                exp_str = udata.get("expires_at", "N/A")
+                
+                # Check if expired automatically
+                try:
+                    exp_dt = datetime.strptime(exp_str, "%Y-%m-%d %H:%M:%S")
+                    if datetime.now() > exp_dt and ustat == "Active":
+                        ustat = "Expired"
+                except Exception:
+                    pass
+
+                stat_html = "<span style='color:green;'>Active</span>" if ustat == "Active" else ("<span style='color:orange;'>Expired</span>" if ustat == "Expired" else "<span style='color:red;'>Blocked</span>")
+                
+                act = f"<a href='/admin_master_jivan?action=block_user&upass={upass}' style='color:red; font-weight:bold;'>BLOCK</a>" if ustat != "Blocked" else f"<a href='/admin_master_jivan?action=unblock_user&upass={upass}' style='color:green; font-weight:bold;'>UNBLOCK</a>"
+                ext = f"<a href='/admin_master_jivan?action=extend_user&upass={upass}&duration=30' style='color:#38bdf8; font-weight:bold;'>+30D</a>"
+                del_btn = f"<a href='/admin_master_jivan?action=delete_user&upass={upass}' style='color:#fbbf24; font-weight:bold;'>DEL</a>"
+                
+                html += f"<tr><td><b>{upass}</b></td><td>{stat_html}</td><td style='font-size:11px; color:#facc15;'>{exp_str}</td><td style='font-family:monospace; font-size:10px;'>{b_ip}</td><td>{act} | {ext} | {del_btn}</td></tr>"
+            
+            html += """
+                </table>
+                <br><a href="/" style="color:#38bdf8; font-weight:bold; font-size:16px;">⬅️ Back to Dashboard</a>
+            </body>
+            </html>
+            """
             self.wfile.write(html.encode('utf-8'))
             return
 
         if security_config["password_enabled"]:
             cookie_header = self.headers.get('Cookie', '')
-            if "auth_token=jivan_vip_auth" not in cookie_header:
+            if "auth_token=" not in cookie_header:
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html; charset=utf-8')
                 self.end_headers()
@@ -529,7 +646,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(HTML_MASTER_CONTENT.encode('utf-8'))
 
     def do_POST(self):
-        client_ip = self.client_address[0]
+        client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
         if client_ip in blocked_ips:
             self.send_response(403)
             self.end_headers()
@@ -538,7 +655,7 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length).decode('utf-8')
         params = parse_qs(post_data)
-        entered_pass = params.get('password', [''])[0]
+        entered_pass = params.get('password', [''])[0].strip()
 
         if self.path.startswith("/admin_master_jivan") and entered_pass == security_config["dashboard_password"]:
             self.send_response(303)
@@ -547,16 +664,53 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        if entered_pass in user_passwords_db and user_passwords_db[entered_pass] == "Blocked":
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html; charset=utf-8')
+        if entered_pass in user_passwords_db:
+            user_data = user_passwords_db[entered_pass]
+            
+            # Check Expiry Date
+            exp_str = user_data.get("expires_at", "")
+            if exp_str:
+                try:
+                    exp_dt = datetime.strptime(exp_str, "%Y-%m-%d %H:%M:%S")
+                    if datetime.now() > exp_dt:
+                        self.send_response(200)
+                        self.send_header('Content-type', 'text/html; charset=utf-8')
+                        self.end_headers()
+                        self.wfile.write(HTML_BLOCKED_HINDI.encode('utf-8'))
+                        return
+                except Exception:
+                    pass
+
+            if user_data.get("status") == "Blocked":
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(HTML_BLOCKED_HINDI.encode('utf-8'))
+                return
+
+            bound_ip = user_data.get("bound_ip", "")
+
+            if bound_ip and bound_ip != client_ip:
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html; charset=utf-8')
+                self.end_headers()
+                err_html = HTML_LOGIN.replace('%ERROR_MSG%', '<div class="error-box">🚫 यह पासवर्ड पहले से ही किसी अन्य डिवाइस पर एक्टिव है! एक पासवर्ड केवल एक मोबाइल पर चल सकता है।</div>')
+                self.wfile.write(err_html.encode('utf-8'))
+                return
+
+            if not bound_ip:
+                user_data["bound_ip"] = client_ip
+                save_passwords(user_passwords_db)
+
+            self.send_response(303)
+            self.send_header('Set-Cookie', f'auth_token=jivan_vip_{entered_pass}; Path=/; Max-Age=31536000')
+            self.send_header('Location', '/')
             self.end_headers()
-            self.wfile.write('<h1 style="color:red; text-align:center; padding-top:20vh;">🚫 Password Blocked! Contact @VIPGUPTAA</h1>'.encode('utf-8'))
             return
 
-        if entered_pass == security_config["dashboard_password"] or (entered_pass in user_passwords_db and user_passwords_db[entered_pass] == "Active"):
+        if entered_pass == security_config["dashboard_password"]:
             self.send_response(303)
-            self.send_header('Set-Cookie', 'auth_token=jivan_vip_auth; Path=/; Max-Age=31536000')
+            self.send_header('Set-Cookie', 'auth_token=jivan_master_auth; Path=/; Max-Age=31536000')
             self.send_header('Location', '/')
             self.end_headers()
         else:
